@@ -1,77 +1,138 @@
+/// Genera el cliente de Prisma para que la aplicación pueda consultar y escribir en la base de datos.
 generator client {
+  /// Define el proveedor oficial del cliente Prisma para JavaScript/Node.js.
   provider = "prisma-client-js"
 }
 
+/// Define la conexión principal a la base de datos relacional.
 datasource db {
+  /// Indica que el motor de base de datos es PostgreSQL.
   provider = "postgresql"
+  /// Toma la cadena de conexión desde la variable de entorno DATABASE_URL.
   url      = env("DATABASE_URL")
 }
 
+/// Enumera los estados permitidos para cada candidato dentro del flujo operativo.
 enum CandidateStatus {
+  /// Estado inicial cuando el candidato apenas entra al flujo.
   NUEVO
+  /// Estado intermedio cuando ya diligenció datos pero aún no envía la hoja de vida.
   PENDIENTE_CV
+  /// Estado cuando el candidato ya completó datos y envió hoja de vida.
   POSTULACION_COMPLETA
+  /// Estado operativo para revisión interna del reclutador.
   VALIDANDO
+  /// Estado final positivo del flujo.
   APROBADO
+  /// Estado final negativo del flujo.
   RECHAZADO
+  /// Estado para candidatos que ya fueron contactados por el equipo.
   CONTACTADO
 }
 
+/// Enumera cada paso del flujo conversacional controlado por backend.
 enum ConversationStep {
+  /// Menú principal del chatbot.
   MENU
+  /// Paso donde se solicita nombre completo.
   ASK_FULL_NAME
+  /// Paso donde se solicita número de documento.
   ASK_DOCUMENT
+  /// Paso donde se solicita edad.
   ASK_AGE
+  /// Paso donde se solicita ciudad.
   ASK_CITY
+  /// Paso donde se solicita barrio o localidad.
   ASK_ZONE
+  /// Paso donde se solicita resumen de experiencia.
   ASK_EXPERIENCE
+  /// Paso donde se solicita disponibilidad.
   ASK_AVAILABILITY
+  /// Paso donde se solicita la hoja de vida.
   ASK_CV
+  /// Paso final cuando el flujo queda cerrado.
   DONE
 }
 
+/// Enumera la dirección de cada mensaje persistido.
 enum MessageDirection {
+  /// Mensaje entrante desde WhatsApp hacia el sistema.
   INBOUND
+  /// Mensaje saliente desde el sistema hacia WhatsApp.
   OUTBOUND
 }
 
+/// Enumera los tipos de mensaje que vamos a persistir para auditoría operativa.
 enum MessageType {
+  /// Mensaje de texto.
   TEXT
+  /// Mensaje con documento adjunto.
   DOCUMENT
+  /// Mensaje interactivo.
   INTERACTIVE
+  /// Mensaje no soportado por el flujo contingente.
   UNKNOWN
 }
 
+/// Modelo principal de candidato.
 model Candidate {
+  /// Identificador único interno del candidato.
   id                String            @id @default(cuid())
+  /// Número de teléfono del candidato, único por registro.
   phone             String            @unique
+  /// Nombre completo capturado por el bot.
   fullName          String?
+  /// Documento del candidato.
   documentNumber    String?
+  /// Edad del candidato.
   age               Int?
+  /// Ciudad del candidato.
   city              String?
+  /// Barrio o localidad del candidato.
   zone              String?
+  /// Resumen de experiencia del candidato.
   experienceSummary String?
+  /// Disponibilidad horaria del candidato.
   availability      String?
+  /// Estado actual del candidato en el proceso.
   status            CandidateStatus   @default(NUEVO)
+  /// Paso actual del flujo conversacional.
   currentStep       ConversationStep  @default(MENU)
+  /// Nombre original del archivo de hoja de vida.
   cvOriginalName    String?
-  cvStorageKey      String?
+  /// Tipo MIME del archivo de hoja de vida.
   cvMimeType        String?
+  /// Binario de la hoja de vida almacenado directamente en PostgreSQL para esta contingencia.
+  cvData            Bytes?
+  /// Fecha de creación automática del registro.
   createdAt         DateTime          @default(now())
+  /// Fecha de actualización automática del registro.
   updatedAt         DateTime          @updatedAt
+  /// Relación uno a muchos con los mensajes del candidato.
   messages          Message[]
 }
 
+/// Modelo de auditoría de mensajes.
 model Message {
+  /// Identificador único interno del mensaje.
   id          String           @id @default(cuid())
+  /// Llave foránea hacia el candidato dueño del mensaje.
   candidateId String
+  /// Relación hacia el candidato asociado al mensaje.
   candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  /// Identificador del mensaje en WhatsApp para idempotencia.
   waMessageId String?          @unique
+  /// Dirección del mensaje.
   direction   MessageDirection
+  /// Tipo del mensaje.
   messageType MessageType
+  /// Cuerpo textual persistido del mensaje.
   body        String?
+  /// Payload crudo completo recibido o generado.
   rawPayload  Json?
+  /// Fecha de creación automática del mensaje.
   createdAt   DateTime         @default(now())
 
+  /// Índice para acelerar consultas por candidato y fecha.
   @@index([candidateId, createdAt])
 }

@@ -22,7 +22,7 @@
     <p><strong>Experiencia:</strong> <%= candidate.experienceSummary || '' %></p>
     <p><strong>Disponibilidad:</strong> <%= candidate.availability || '' %></p>
     <p><strong>Estado actual:</strong> <%= candidate.status %></p>
-    <% if (candidate.cvStorageKey) { %>
+    <% if (candidate.cvData) { %>
       <p><a href="/admin/candidates/<%= candidate.id %>/cv">Descargar CV</a></p>
     <% } %>
   </div>

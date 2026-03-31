@@ -35,7 +35,7 @@
           <td><%= c.documentNumber || '' %></td>
           <td><%= c.city || '' %></td>
           <td><%= c.status %></td>
-          <td><%= c.cvStorageKey ? 'Sí' : 'No' %></td>
+          <td><%= c.cvData ? 'Sí' : 'No' %></td>
           <td><a href="/admin/candidates/<%= c.id %>">Ver</a></td>
         </tr>
       <% } %>
