@@ -29,7 +29,7 @@
     <tbody>
       <% for (const c of candidates) { %>
         <tr>
-          <td><%= new Date(c.createdAt).toLocaleString('es-CO') %></td>
+          <td><%= formatDateTimeCO(c.createdAt) %></td>
           <td><%= c.phone %></td>
           <td><%= c.fullName || '' %></td>
           <td><%= c.documentNumber || '' %></td>

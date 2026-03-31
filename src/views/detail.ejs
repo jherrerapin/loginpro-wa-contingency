@@ -47,7 +47,7 @@
     <h2>Mensajes</h2>
     <% for (const m of candidate.messages) { %>
       <div style="border:1px solid #ddd;padding:8px;margin-bottom:8px;">
-        <p><strong><%= m.direction %></strong> | <%= m.messageType %> | <%= new Date(m.createdAt).toLocaleString('es-CO') %></p>
+        <p><strong><%= m.direction %></strong> | <%= m.messageType %> | <%= formatDateTimeCO(m.createdAt) %></p>
         <pre><%= m.body || '' %></pre>
       </div>
     <% } %>
