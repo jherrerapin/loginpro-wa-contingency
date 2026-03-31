@@ -11,7 +11,18 @@ import { extractMessages, sendTextMessage } from '../services/whatsapp.js';
 import { fetchMediaMetadata, downloadMedia } from '../services/media.js';
 
 // Define el texto informativo de la vacante que ya usa la operación actual.
-const INFO_TEXT = `Vacante activa. Debes enviar tus datos y tu hoja de vida. Si continúas, el equipo de reclutamiento revisará tu perfil.`;
+const INFO_TEXT = `*Vacante: Auxiliar de Cargue y Descargue (personal masculino)*
+
+Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en Ibagué. El lugar de trabajo es en el sector de Almacafé.
+
+*Características del Puesto:*
+- Horario flexible: la jornada se adapta a la operación diaria, pudiendo iniciar entre las 6:00 a. m. y las 10:00 a. m. y terminar según la operación.
+- Los pagos se realizan los días 5 y 20 de cada mes.
+- Salario: SMMLV.
+- Horarios rotativos diurnos, de lunes a domingo, con un día compensatorio.
+- Contrato por obra labor directamente con la empresa.
+- Prestaciones de ley.
+- Debe contar con medio de transporte: moto o bicicleta.`;
 
 // Define el mensaje inicial solicitado para el nuevo flujo.
 const INITIAL_GREETING_TEXT = `Hola, Dios te bendiga. Te comparto la información de la vacante:\n${INFO_TEXT}\n\nSi estás interesado, responde a este mensaje y te pediré tus datos para continuar.`;
