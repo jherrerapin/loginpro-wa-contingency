@@ -34,6 +34,31 @@ function basicAuth(req, res, next) {
   next();
 }
 
+// Formatea fechas para el dashboard en zona horaria de Colombia (Bogotá) sin alterar almacenamiento.
+function formatDateTimeCO(value) {
+  // Evita errores cuando no hay fecha disponible.
+  if (!value) {
+    return '';
+  }
+
+  // Convierte a Date y valida que sea una fecha válida.
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  // Renderiza con configuración regional de Colombia y hora de Bogotá.
+  return new Intl.DateTimeFormat('es-CO', {
+    timeZone: 'America/Bogota',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
 // Expone el router administrativo.
 export function adminRouter(prisma) {
   // Crea una nueva instancia de router.
@@ -53,7 +78,7 @@ export function adminRouter(prisma) {
     });
 
     // Renderiza la vista de listado.
-    res.render('list', { candidates });
+    res.render('list', { candidates, formatDateTimeCO });
   });
 
   // Ruta de detalle de un candidato específico.
@@ -77,7 +102,7 @@ export function adminRouter(prisma) {
     }
 
     // Renderiza la vista de detalle.
-    res.render('detail', { candidate });
+    res.render('detail', { candidate, formatDateTimeCO });
   });
 
   // Ruta para actualizar el estado del candidato desde el panel.
