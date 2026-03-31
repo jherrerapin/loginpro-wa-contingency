@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CandidateStatus {
+  NUEVO
+  PENDIENTE_CV
+  POSTULACION_COMPLETA
+  VALIDANDO
+  APROBADO
+  RECHAZADO
+  CONTACTADO
+}
+
+enum ConversationStep {
+  MENU
+  ASK_FULL_NAME
+  ASK_DOCUMENT
+  ASK_AGE
+  ASK_CITY
+  ASK_ZONE
+  ASK_EXPERIENCE
+  ASK_AVAILABILITY
+  ASK_CV
+  DONE
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  DOCUMENT
+  INTERACTIVE
+  UNKNOWN
+}
+
+model Candidate {
+  id                String            @id @default(cuid())
+  phone             String            @unique
+  fullName          String?
+  documentNumber    String?
+  age               Int?
+  city              String?
+  zone              String?
+  experienceSummary String?
+  availability      String?
+  status            CandidateStatus   @default(NUEVO)
+  currentStep       ConversationStep  @default(MENU)
+  cvOriginalName    String?
+  cvStorageKey      String?
+  cvMimeType        String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  messages          Message[]
+}
+
+model Message {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  waMessageId String?          @unique
+  direction   MessageDirection
+  messageType MessageType
+  body        String?
+  rawPayload  Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([candidateId, createdAt])
+}

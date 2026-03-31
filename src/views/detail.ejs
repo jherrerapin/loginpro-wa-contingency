@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Detalle candidato</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    .box { margin-bottom: 24px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <p><a href="/admin">← Volver</a></p>
+  <h1><%= candidate.fullName || 'Sin nombre' %></h1>
+
+  <div class="box">
+    <p><strong>Teléfono:</strong> <%= candidate.phone %></p>
+    <p><strong>Documento:</strong> <%= candidate.documentNumber || '' %></p>
+    <p><strong>Edad:</strong> <%= candidate.age || '' %></p>
+    <p><strong>Ciudad:</strong> <%= candidate.city || '' %></p>
+    <p><strong>Zona:</strong> <%= candidate.zone || '' %></p>
+    <p><strong>Experiencia:</strong> <%= candidate.experienceSummary || '' %></p>
+    <p><strong>Disponibilidad:</strong> <%= candidate.availability || '' %></p>
+    <p><strong>Estado actual:</strong> <%= candidate.status %></p>
+    <% if (candidate.cvStorageKey) { %>
+      <p><a href="/admin/candidates/<%= candidate.id %>/cv">Descargar CV</a></p>
+    <% } %>
+  </div>
+
+  <div class="box">
+    <form method="post" action="/admin/candidates/<%= candidate.id %>/status">
+      <label><strong>Cambiar estado:</strong></label>
+      <select name="status">
+        <option value="NUEVO">NUEVO</option>
+        <option value="PENDIENTE_CV">PENDIENTE_CV</option>
+        <option value="POSTULACION_COMPLETA">POSTULACION_COMPLETA</option>
+        <option value="VALIDANDO">VALIDANDO</option>
+        <option value="APROBADO">APROBADO</option>
+        <option value="RECHAZADO">RECHAZADO</option>
+        <option value="CONTACTADO">CONTACTADO</option>
+      </select>
+      <button type="submit">Guardar</button>
+    </form>
+  </div>
+
+  <div class="box">
+    <h2>Mensajes</h2>
+    <% for (const m of candidate.messages) { %>
+      <div style="border:1px solid #ddd;padding:8px;margin-bottom:8px;">
+        <p><strong><%= m.direction %></strong> | <%= m.messageType %> | <%= new Date(m.createdAt).toLocaleString('es-CO') %></p>
+        <pre><%= m.body || '' %></pre>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>

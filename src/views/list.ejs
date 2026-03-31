@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Candidatos</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+    a { text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Candidatos</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Teléfono</th>
+        <th>Nombre</th>
+        <th>Documento</th>
+        <th>Ciudad</th>
+        <th>Estado</th>
+        <th>CV</th>
+        <th>Detalle</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% for (const c of candidates) { %>
+        <tr>
+          <td><%= new Date(c.createdAt).toLocaleString('es-CO') %></td>
+          <td><%= c.phone %></td>
+          <td><%= c.fullName || '' %></td>
+          <td><%= c.documentNumber || '' %></td>
+          <td><%= c.city || '' %></td>
+          <td><%= c.status %></td>
+          <td><%= c.cvStorageKey ? 'Sí' : 'No' %></td>
+          <td><a href="/admin/candidates/<%= c.id %>">Ver</a></td>
+        </tr>
+      <% } %>
+    </tbody>
+  </table>
+</body>
+</html>
