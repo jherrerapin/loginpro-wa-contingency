@@ -18,19 +18,19 @@ const INFO_VACANTE = {
   cargo: 'Auxiliar de Cargue y Descargue',
   genero: 'personal masculino',
   ciudad: 'Ibagué',
-  sector: 'Aeropuerto',
+  sector: 'Sector Aeropuerto',
   horario: 'Turnos rotativos de lunes a domingo, con un día compensatorio. Se requiere disponibilidad para turnos rotativos.',
   salario: 'Salario Mínimo Mensual Legal Vigente (SMMLV) con prestaciones de ley.',
   fechasPago: 'Pago quincenal.',
   contrato: 'Contrato por obra labor directamente con la empresa.',
   transporte: 'Debe contar con medio de transporte propio: moto o bicicleta.',
-  requisitos: 'Ser mayor de edad (18 años) y menor de 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT (Permiso por Protección Temporal) vigente. Contar con medio de transporte propio (moto o bicicleta).'
+  requisitos: 'Tener entre 18 y 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT (Permiso por Protección Temporal) vigente. Contar con medio de transporte propio (moto o bicicleta).'
 };
 
 // Texto formateado de la vacante para compartir en el saludo.
 const INFO_TEXT = `*Vacante: ${INFO_VACANTE.cargo} (${INFO_VACANTE.genero})*
 
-Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO_VACANTE.ciudad}. El lugar de trabajo es en el sector del ${INFO_VACANTE.sector}.
+Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO_VACANTE.ciudad}. El lugar de trabajo es en el ${INFO_VACANTE.sector}.
 
 *Características del Puesto:*
 - Turnos rotativos de lunes a domingo, con un día compensatorio. Se requiere disponibilidad para turnos rotativos.
@@ -38,7 +38,7 @@ Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO
 - Salario: SMMLV.
 - Contrato por obra labor directamente con la empresa.
 - Prestaciones de ley.
-- Requisitos: Ser mayor de edad (18 años) y menor de 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT vigente. Contar con medio de transporte propio (moto o bicicleta).`;
+- Requisitos: Tener entre 18 y 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT vigente. Contar con medio de transporte propio (moto o bicicleta).`;
 
 // ─────────────────────────────────────────────────────────
 // Mensajes del bot
@@ -124,7 +124,7 @@ function detectFAQ(text) {
 
   // Ubicación
   if (/ubicaci[óo]n|d[óo]nde (es|queda|est[áa])|direcci[óo]n|lugar|sector|sitio/.test(n)) {
-    return `El lugar de trabajo es en ${INFO_VACANTE.ciudad}, sector ${INFO_VACANTE.sector}.\n\n¿Te gustaría postularte?`;
+    return `El lugar de trabajo es en ${INFO_VACANTE.ciudad}, ${INFO_VACANTE.sector}.\n\n¿Te gustaría postularte?`;
   }
 
   // Contrato
@@ -220,10 +220,10 @@ function parseNaturalData(text) {
   const edadMatch = remaining.match(edadRegex);
   if (edadMatch) {
     const edad = parseInt(edadMatch[1], 10);
-    if (edad >= 18 && edad <= 49) {
+    if (edad >= 18 && edad <= 50) {
       result.age = edad;
       remaining = remaining.replace(edadMatch[0], ' ');
-    } else if (edad >= 50) {
+    } else if (edad > 50) {
       result.ageRejected = true;
     }
   }
@@ -233,10 +233,10 @@ function parseNaturalData(text) {
     const edadAlt = remaining.match(/\bedad\s*[:\-]?\s*(\d{1,2})\b/i);
     if (edadAlt) {
       const edad = parseInt(edadAlt[1], 10);
-      if (edad >= 18 && edad <= 49) {
+      if (edad >= 18 && edad <= 50) {
         result.age = edad;
         remaining = remaining.replace(edadAlt[0], ' ');
-      } else if (edad >= 50) {
+      } else if (edad > 50) {
         result.ageRejected = true;
       }
     }
@@ -490,7 +490,7 @@ async function processText(prisma, candidate, from, text) {
     if (parsedData.ageRejected) {
       await reply(
         prisma, candidate.id, from,
-        'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+        'Lamentablemente la vacante es para personas entre 18 y 50 años. Gracias por tu interés.'
       );
       return;
     }
@@ -539,7 +539,7 @@ async function processText(prisma, candidate, from, text) {
     if (parsedData.ageRejected) {
       await reply(
         prisma, candidate.id, from,
-        'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+        'Lamentablemente la vacante es para personas entre 18 y 50 años. Gracias por tu interés.'
       );
       return;
     }
@@ -562,14 +562,14 @@ async function processText(prisma, candidate, from, text) {
       else if (field === 'tipo y número de documento') updateData.documentNumber = cleanText;
       else if (field === 'edad') {
         const num = parseInt(cleanText, 10);
-        if (num >= 50) {
+        if (num > 50) {
           await reply(
             prisma, candidate.id, from,
-            'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+            'Lamentablemente la vacante es para personas entre 18 y 50 años. Gracias por tu interés.'
           );
           return;
         }
-        if (num >= 18 && num <= 49) updateData.age = num;
+        if (num >= 18 && num <= 50) updateData.age = num;
       }
       else if (field === 'ciudad') updateData.city = capitalizeWords(cleanText);
       else if (field === 'barrio o zona') updateData.zone = capitalizeWords(cleanText);
