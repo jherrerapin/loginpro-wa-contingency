@@ -25,6 +25,14 @@
     .status-form select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
     .status-form button { padding: 6px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
     .status-form button:hover { background: #2980b9; }
+    .edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-group label { font-size: 12px; color: #666; font-weight: 600; }
+    .field-group input, .field-group select { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .form-actions { margin-top: 14px; display: flex; gap: 10px; }
+    .btn-primary { padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .btn-primary:hover { background: #2980b9; }
+    .btn-secondary { padding: 8px 16px; border: 1px solid #ccc; border-radius: 4px; color: #555; font-size: 14px; text-decoration: none; background: #fff; }
     .messages-list { max-height: 500px; overflow-y: auto; }
     .msg { padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; max-width: 80%; }
     .msg-bot { background: #e8f5e9; margin-right: auto; }
@@ -45,6 +53,7 @@
       <a href="/admin/monitor">Monitor</a>
     <% } %>
     <a href="/admin/export">Descargar Excel</a>
+    <a href="/admin/logout">Cerrar sesión</a>
   </nav>
   <div class="container">
     <a href="/admin" class="back-link">&larr; Volver al listado</a>
@@ -108,6 +117,69 @@
           <option value="CONTACTADO" <%= candidate.status === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
         </select>
         <button type="submit">Guardar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Edición manual de datos</h2>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/edit">
+        <div class="edit-form">
+          <div class="field-group">
+            <label for="fullName">Nombre completo</label>
+            <input id="fullName" name="fullName" type="text" value="<%= candidate.fullName || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="documentType">Tipo de documento</label>
+            <input id="documentType" name="documentType" type="text" value="<%= candidate.documentType || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="documentNumber">Número de documento</label>
+            <input id="documentNumber" name="documentNumber" type="text" value="<%= candidate.documentNumber || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="age">Edad</label>
+            <input id="age" name="age" type="number" min="0" value="<%= candidate.age ?? '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="neighborhood">Barrio</label>
+            <input id="neighborhood" name="neighborhood" type="text" value="<%= candidate.neighborhood || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="experienceInfo">¿Tiene experiencia?</label>
+            <select id="experienceInfo" name="experienceInfo">
+              <option value="" <%= !candidate.experienceInfo ? 'selected' : '' %>>—</option>
+              <option value="Si" <%= candidate.experienceInfo === 'Si' ? 'selected' : '' %>>Sí</option>
+              <option value="No" <%= candidate.experienceInfo === 'No' ? 'selected' : '' %>>No</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="experienceTime">Tiempo de experiencia</label>
+            <input id="experienceTime" name="experienceTime" type="text" value="<%= candidate.experienceTime || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="medicalRestrictions">Restricciones médicas</label>
+            <input id="medicalRestrictions" name="medicalRestrictions" type="text" value="<%= candidate.medicalRestrictions || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="transportMode">Medio de transporte</label>
+            <input id="transportMode" name="transportMode" type="text" value="<%= candidate.transportMode || '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="statusEdit">Estado</label>
+            <select id="statusEdit" name="status">
+              <option value="NUEVO" <%= candidate.status === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
+              <option value="REGISTRADO" <%= candidate.status === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
+              <option value="VALIDANDO" <%= candidate.status === 'VALIDANDO' ? 'selected' : '' %>>En revisión</option>
+              <option value="APROBADO" <%= candidate.status === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
+              <option value="RECHAZADO" <%= candidate.status === 'RECHAZADO' ? 'selected' : '' %>>Rechazado</option>
+              <option value="CONTACTADO" <%= candidate.status === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Guardar cambios</button>
+          <a href="/admin/candidates/<%= candidate.id %>" class="btn-secondary">Cancelar</a>
+        </div>
       </form>
     </div>
 

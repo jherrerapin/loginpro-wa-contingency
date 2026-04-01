@@ -29,6 +29,13 @@ function basicAuth(req, res, next) {
   return res.status(401).send('Invalid credentials');
 }
 
+// Normaliza strings de formularios: trim y null si queda vacío.
+function normalizeString(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 // Formatea fechas para el dashboard en zona horaria de Colombia (Bogotá).
 function formatDateTimeCO(value) {
   if (!value) return '';
@@ -64,6 +71,12 @@ export function adminRouter(prisma) {
   // Protege todas las rutas del dashboard con autenticación básica.
   router.use(basicAuth);
 
+  // Permite "cerrar sesión" de Basic Auth forzando nuevo reto de credenciales.
+  router.get('/logout', (_req, res) => {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin", charset="UTF-8"');
+    return res.status(401).send('Sesión cerrada. Vuelve a ingresar con otro usuario.');
+  });
+
   // Ruta principal: listado de candidatos.
   router.get('/', async (req, res) => {
     const candidates = await prisma.candidate.findMany({
@@ -91,6 +104,53 @@ export function adminRouter(prisma) {
     }
 
     res.render('detail', { candidate, formatDateTimeCO, role: req.userRole });
+  });
+
+  // Ruta para edición manual de datos del candidato desde el panel.
+  router.post('/candidates/:id/edit', express.urlencoded({ extended: true }), async (req, res) => {
+    const fullName = normalizeString(req.body.fullName);
+    const documentType = normalizeString(req.body.documentType);
+    const documentNumber = normalizeString(req.body.documentNumber);
+    const neighborhood = normalizeString(req.body.neighborhood);
+    const experienceInfo = normalizeString(req.body.experienceInfo);
+    const transportMode = normalizeString(req.body.transportMode);
+    const status = normalizeString(req.body.status);
+
+    let experienceTime = normalizeString(req.body.experienceTime);
+    if (experienceInfo === 'No' && !experienceTime) {
+      experienceTime = '0';
+    }
+
+    let medicalRestrictions = normalizeString(req.body.medicalRestrictions);
+    const normalizedRestrictions = medicalRestrictions ? medicalRestrictions.toLowerCase() : '';
+    if (['ninguna', 'no', 'sin restricciones'].includes(normalizedRestrictions)) {
+      medicalRestrictions = 'Sin restricciones médicas';
+    }
+
+    const rawAge = typeof req.body.age === 'string' ? req.body.age.trim() : '';
+    let age = null;
+    if (rawAge !== '') {
+      const parsedAge = Number.parseInt(rawAge, 10);
+      age = Number.isNaN(parsedAge) ? null : parsedAge;
+    }
+
+    await prisma.candidate.update({
+      where: { id: req.params.id },
+      data: {
+        fullName,
+        documentType,
+        documentNumber,
+        age,
+        neighborhood,
+        experienceInfo,
+        experienceTime,
+        medicalRestrictions,
+        transportMode,
+        status
+      }
+    });
+
+    res.redirect(`/admin/candidates/${req.params.id}`);
   });
 
   // Ruta para actualizar el estado del candidato desde el panel.
