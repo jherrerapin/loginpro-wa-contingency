@@ -25,8 +25,9 @@ Si estás interesado en continuar, respóndeme y te solicitaré tus datos.`;
 
 const SOLICITAR_DATOS = 'Perfecto. Envíame por favor estos datos para continuar: nombre completo, tipo de documento, número de documento, edad, barrio, si tienes experiencia en el cargo y cuánto tiempo, si tienes restricciones médicas y qué medio de transporte tienes. Puedes enviarlos en un solo mensaje, como te sea más fácil.';
 const DESCARTE_MSG = 'Gracias por tu interés. En este caso no es posible continuar con tu postulación porque no cumples con uno de los requisitos definidos para esta vacante.';
-const CIERRE_NO_INTERES = 'Gracias por tu tiempo. Si en otro momento deseas participar en una vacante, puedes escribirnos de nuevo. Te deseamos un excelente día.';
+const CIERRE_NO_INTERES = 'Entendido. Si más adelante deseas continuar con la postulación, puedes volver a escribirme y con gusto retomamos el proceso.';
 const MENSAJE_FINAL = 'Tu información ya fue recibida correctamente. Por favor espera a que el equipo de reclutamiento se comunique contigo.';
+const GUIA_CONTINUAR = 'Puedo ayudarte a continuar con la postulación. Si deseas seguir, envíame tus datos y te voy guiando.';
 
 function normalizeText(text = '') {
   return text.trim();
@@ -43,16 +44,21 @@ function isFAQ(text) {
 
 function isAffirmativeInterest(text) {
   const n = normalizeText(text).toLowerCase();
+  if (!n) return false;
+
   const patterns = [
-    'si', 'sí', 'claro', 'listo', 'ok', 'okay', 'me interesa', 'quiero aplicar',
-    'quiero postularme', 'quiero participar', 'de una', 'hagámosle', 'vamos'
+    'si', 'sí', 'claro', 'listo', 'ok', 'okay', 'dale', 'de una', 'hagámosle', 'vamos',
+    'estoy interesado', 'estoy interesada', 'me interesa', 'quiero aplicar', 'quiero postularme',
+    'quiero participar', 'deseo continuar', 'me gustaría postularme', 'quiero seguir', 'continuar'
   ];
-  return patterns.some((p) => n === p || n.includes(p));
+  if (patterns.some((p) => n === p || n.includes(p))) return true;
+
+  return /(quiero|deseo|me gustar[ií]a|vamos|listo|claro).*(aplicar|postular|continuar|seguir|participar)/i.test(n);
 }
 
 function isNegativeInterest(text) {
   const n = normalizeText(text).toLowerCase();
-  return /(no gracias|no me interesa|no estoy interesad|no deseo|paso|ya no|no\b)/i.test(n);
+  return /^(no+|nop+|negativo)$|no gracias|no me interesa|no estoy interesad|no deseo|paso|ya no|prefiero no/i.test(n);
 }
 
 function shouldRejectByRequirements(text, parsed = {}) {
@@ -109,24 +115,32 @@ function parseNaturalData(text) {
     remaining = remaining.replace(barrioMatch[0], ' ');
   }
 
-  const expInfo = remaining.match(/(?:experiencia\s*(?:en\s+el\s+cargo)?\s*[:\-]?\s*)(sí|si|no|tengo|no\s+tengo|cuento\s+con|sin\s+experiencia)/i);
-  if (expInfo) {
-    const raw = expInfo[1].toLowerCase();
-    result.experienceInfo = /no|sin/.test(raw) ? 'No' : 'Sí';
-  } else if (/\b(s[ií],?\s*tengo\s+experiencia|tengo\s+experiencia|sin\s+experiencia|no\s+tengo\s+experiencia)\b/i.test(remaining)) {
-    result.experienceInfo = /no|sin/i.test(remaining) ? 'No' : 'Sí';
+  const negativeExperience = /\b(no\s+tengo\s+experiencia|sin\s+experiencia)\b/i.test(remaining);
+  const positiveExperience = /\b(s[ií],?\s*tengo\s+experiencia|tengo\s+experiencia|cuento\s+con\s+experiencia|experiencia\s*[:\-]?\s*s[ií])\b/i.test(remaining);
+  if (negativeExperience) {
+    result.experienceInfo = 'No';
+  } else if (positiveExperience) {
+    result.experienceInfo = 'Sí';
   }
 
-  const expTime = remaining.match(/(\d+\s*(?:a[ñn]os?|mes(?:es)?|semana(?:s)?))/i);
-  if (expTime && /experiencia|cargo|trabaj/i.test(remaining)) {
+  const expTime = remaining.match(/\b(?:tengo|llevo|cuento\s+con|experiencia\s+de)?\s*(\d+\s*(?:a[ñn]os?|mes(?:es)?|semana(?:s)?))\b/i);
+  if (expTime) {
     result.experienceTime = expTime[1];
+    result.experienceInfo = 'Sí';
   }
 
+  const medicalNegative = /\b(no\s+tengo\s+ninguna\s+restricci[oó]n|no\s+tengo\s+restricciones?\s+m[ée]dicas?|no\s+presento\s+restricciones?\s+m[ée]dicas?|no\s+cuento\s+con\s+restricciones?\s+m[ée]dicas?|ninguna\s+restricci[oó]n\s+m[ée]dica|sin\s+restricciones?\s+m[ée]dicas?)\b/i.test(remaining)
+    || /^(no|ninguna|ninguno)$/i.test(remaining);
+  const medicalAffirmative = /\b(s[ií]\s+tengo\s+restricciones?\s+m[ée]dicas?|tengo\s+restricci[oó]n(?:\s+m[ée]dica)?|no\s+puedo\s+cargar|problema\s+de\s+columna|restricci[oó]n\s+en\s+la\s+espalda)\b/i.test(remaining);
   const medicalMatch = remaining.match(/(?:restricciones?\s+m[ée]dicas?\s*[:\-]?\s*)([^,.\n]{2,100})/i);
-  if (medicalMatch) {
-    result.medicalRestrictions = capitalizeWords(medicalMatch[1].trim());
-  } else if (/\b(no\s+tengo\s+restricciones?|ninguna)\b/i.test(remaining)) {
-    result.medicalRestrictions = 'Ninguna';
+  if (medicalNegative) {
+    result.medicalRestrictions = 'Sin restricciones médicas';
+  } else if (medicalMatch) {
+    const medicalValue = medicalMatch[1].trim();
+    result.medicalRestrictions = /^no$/i.test(medicalValue) ? 'Sin restricciones médicas' : capitalizeWords(medicalValue);
+  } else if (medicalAffirmative) {
+    const snippet = remaining.match(/(tengo\s+[^,.\n]{5,80}|no\s+puedo\s+[^,.\n]{5,80}|problema\s+de\s+[^,.\n]{3,80})/i);
+    result.medicalRestrictions = snippet ? capitalizeWords(snippet[1].trim()) : 'Sí, reporta restricciones médicas';
   }
 
   const transportMatch = remaining.match(/\b(moto|bicicleta|bici|carro|bus|ninguno|ninguna)\b/i);
@@ -161,6 +175,17 @@ function getMissingFields(candidate) {
   return missing;
 }
 
+function containsCandidateData(text) {
+  const parsed = parseNaturalData(text);
+  return Object.keys(parsed).length > 0;
+}
+
+function getNaturalDelayMs(inputText = '', outputText = '') {
+  const referenceLength = Math.max(normalizeText(inputText).length, normalizeText(outputText).length, 1);
+  const delayByLength = 1500 + Math.min(1000, Math.round(referenceLength * 8));
+  return Math.max(1500, Math.min(2500, delayByLength));
+}
+
 async function saveInboundMessage(prisma, candidateId, message, body, type) {
   try {
     await prisma.message.create({
@@ -192,8 +217,8 @@ async function saveOutboundMessage(prisma, candidateId, body) {
   });
 }
 
-async function reply(prisma, candidateId, to, body) {
-  await sleep(900);
+async function reply(prisma, candidateId, to, body, inboundText = '') {
+  await sleep(getNaturalDelayMs(inboundText, body));
   await sendTextMessage(to, body);
   await saveOutboundMessage(prisma, candidateId, body);
 }
@@ -208,6 +233,7 @@ async function rejectCandidate(prisma, candidateId, from) {
 
 async function processText(prisma, candidate, from, text) {
   const cleanText = normalizeText(text);
+  const hasDataIntent = containsCandidateData(cleanText);
 
   if (isFAQ(cleanText)) {
     await reply(prisma, candidate.id, from, FAQ_RESPONSE);
@@ -232,13 +258,31 @@ async function processText(prisma, candidate, from, text) {
 
   if (candidate.currentStep === ConversationStep.GREETING_SENT) {
     if (isNegativeInterest(cleanText)) {
-      await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.DONE } });
+      await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.GREETING_SENT } });
       await reply(prisma, candidate.id, from, CIERRE_NO_INTERES);
       return;
     }
 
-    if (isAffirmativeInterest(cleanText)) {
+    if (isAffirmativeInterest(cleanText) || hasDataIntent) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
+      if (hasDataIntent) {
+        const parsedData = parseNaturalData(cleanText);
+        if (shouldRejectByRequirements(cleanText, parsedData)) {
+          await rejectCandidate(prisma, candidate.id, from);
+          return;
+        }
+
+        await prisma.candidate.update({ where: { id: candidate.id }, data: { ...parsedData, currentStep: ConversationStep.COLLECTING_DATA } });
+        const updated = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+        const missing = getMissingFields(updated);
+        if (missing.length === 0) {
+          await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.DONE, status: CandidateStatus.REGISTRADO } });
+          await reply(prisma, candidate.id, from, MENSAJE_FINAL);
+        } else {
+          await reply(prisma, candidate.id, from, `Gracias. Para continuar solo me falta: ${missing.join(', ')}`);
+        }
+        return;
+      }
       await reply(prisma, candidate.id, from, SOLICITAR_DATOS);
       return;
     }
@@ -249,7 +293,7 @@ async function processText(prisma, candidate, from, text) {
       return;
     }
 
-    if (Object.keys(parsedData).length >= 2) {
+    if (Object.keys(parsedData).length >= 1) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { ...parsedData, currentStep: ConversationStep.COLLECTING_DATA } });
       const updated = await prisma.candidate.findUnique({ where: { id: candidate.id } });
       const missing = getMissingFields(updated);
@@ -262,7 +306,7 @@ async function processText(prisma, candidate, from, text) {
       return;
     }
 
-    await reply(prisma, candidate.id, from, 'Si deseas continuar con la postulación, respóndeme con un “sí” y te pido los datos. Si prefieres, también puedes escribirme tu duda sobre fechas del proceso.');
+    await reply(prisma, candidate.id, from, GUIA_CONTINUAR);
     return;
   }
 
