@@ -7,13 +7,27 @@ import { CandidateStatus, ConversationStep, MessageDirection, MessageType } from
 // Importa utilidades para extraer mensajes del payload y responder por WhatsApp.
 import { extractMessages, sendTextMessage } from '../services/whatsapp.js';
 
-// Importa servicios para consultar y descargar archivos enviados por WhatsApp.
-import { fetchMediaMetadata, downloadMedia } from '../services/media.js';
+// ─────────────────────────────────────────────────────────
+// Información de la vacante (fuente única de verdad para FAQ y saludo)
+// ─────────────────────────────────────────────────────────
 
-// Define el texto informativo de la vacante que ya usa la operación actual.
-const INFO_TEXT = `*Vacante: Auxiliar de Cargue y Descargue (personal masculino)*
+const INFO_VACANTE = {
+  cargo: 'Auxiliar de Cargue y Descargue',
+  genero: 'personal masculino',
+  ciudad: 'Ibagué',
+  sector: 'Almacafé',
+  horario: 'Jornada flexible: puede iniciar entre 6:00 a.m. y 10:00 a.m., termina según la operación. Horarios rotativos diurnos, de lunes a domingo con un día compensatorio.',
+  salario: 'Salario Mínimo Mensual Legal Vigente (SMMLV) con prestaciones de ley.',
+  fechasPago: 'Los días 5 y 20 de cada mes.',
+  contrato: 'Contrato por obra labor directamente con la empresa.',
+  transporte: 'Debe contar con medio de transporte propio: moto o bicicleta.',
+  requisitos: 'Ser mayor de edad, contar con documento de identidad vigente y tener medio de transporte (moto o bicicleta).'
+};
 
-Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en Ibagué. El lugar de trabajo es en el sector de Almacafé.
+// Texto formateado de la vacante para compartir en el saludo.
+const INFO_TEXT = `*Vacante: ${INFO_VACANTE.cargo} (${INFO_VACANTE.genero})*
+
+Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO_VACANTE.ciudad}. El lugar de trabajo es en el sector de ${INFO_VACANTE.sector}.
 
 *Características del Puesto:*
 - Horario flexible: la jornada se adapta a la operación diaria, pudiendo iniciar entre las 6:00 a. m. y las 10:00 a. m. y terminar según la operación.
@@ -24,146 +38,352 @@ Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en Ibagu�
 - Prestaciones de ley.
 - Debe contar con medio de transporte: moto o bicicleta.`;
 
-// Define el mensaje inicial solicitado para el nuevo flujo.
-const INITIAL_GREETING_TEXT = `Hola, Dios te bendiga. Te comparto la información de la vacante:\n${INFO_TEXT}\n\nSi estás interesado, responde a este mensaje y te pediré tus datos para continuar.`;
+// ─────────────────────────────────────────────────────────
+// Mensajes del bot
+// ─────────────────────────────────────────────────────────
 
-// Define el formato único solicitado para capturar datos en una sola línea.
-const SINGLE_LINE_DATA_TEXT =
-  'Perfecto. Por favor envía tus datos en una sola línea con este formato:\n\nNombre completo | Tipo de documento | Número de documento | Edad | Ciudad/Barrio';
+const SALUDO_INICIAL = `Hola, buen día. Gracias por escribirnos. Somos el equipo de selección de LoginPro.
 
-// Define la instrucción de envío de hoja de vida.
-const ASK_CV_TEXT = 'Perfecto. Ahora envíame tu hoja de vida en PDF o Word en este mismo chat.';
+Te comparto la información de la vacante disponible:
 
-// Define el mensaje fijo para candidatos que ya completaron el flujo.
-const ALREADY_COMPLETED_TEXT =
-  'Tu información ya fue recibida correctamente. Por favor espera a que el equipo de reclutamiento se comunique contigo.';
+${INFO_TEXT}
 
-// Normaliza cualquier texto entrante para evitar problemas con espacios al inicio o al final.
+¿Te interesa postularte o tienes alguna pregunta sobre la vacante?`;
+
+const SOLICITAR_DATOS = `¡Perfecto! Para registrarte necesito los siguientes datos:
+
+- Nombre completo
+- Tipo y número de documento (ej: CC 1234567890)
+- Edad
+- Ciudad
+- Barrio o zona donde vives
+
+Puedes enviarlos como prefieras, en un solo mensaje o por partes.`;
+
+const MENSAJE_YA_REGISTRADO = `Ya te encuentras registrado/a en nuestro sistema. Recuerda que la entrevista se realizará el *8 de abril*. Está atento/a al llamado con el lugar y hora exacta. ¡Éxitos!`;
+
+// ─────────────────────────────────────────────────────────
+// Detección de intención del candidato
+// ─────────────────────────────────────────────────────────
+
+// Normaliza texto entrante.
 function normalizeText(text = '') {
-  // Retorna el texto recortado.
   return text.trim();
 }
 
-// Evalúa si el candidato expresó interés claro para continuar.
+// Evalúa si el candidato expresó interés positivo.
 function isAffirmativeInterest(text) {
-  // Normaliza el texto en minúscula para facilitar la comparación.
-  const normalized = normalizeText(text).toLowerCase();
-
-  // Lista de frases permitidas para interpretar intención positiva.
-  const affirmativePatterns = [
-    'si',
-    'sí',
-    'estoy interesado',
-    'me interesa',
-    'quiero aplicar',
-    'quiero postularme'
+  const n = normalizeText(text).toLowerCase();
+  const patterns = [
+    'si', 'sí', 'claro', 'dale', 'listo', 'va', 'ok', 'okay',
+    'estoy interesado', 'me interesa', 'quiero aplicar', 'quiero postularme',
+    'cómo aplico', 'como aplico', 'cómo me inscribo', 'como me inscribo',
+    'quiero inscribirme', 'me gustaría aplicar', 'me gustaria aplicar',
+    'quiero participar', 'por supuesto', 'claro que sí', 'claro que si',
+    'cómo hago', 'como hago', 'dónde me inscribo', 'donde me inscribo'
   ];
-
-  // Retorna verdadero si el texto coincide exactamente o contiene una frase positiva clara.
-  return affirmativePatterns.some((pattern) => normalized === pattern || normalized.includes(pattern));
+  return patterns.some((p) => n === p || n.includes(p));
 }
 
-// Evalúa si la respuesta del candidato indica que no desea continuar.
+// Evalúa si la respuesta indica que no desea continuar.
 function isNegativeInterest(text) {
-  // Normaliza el texto en minúscula para facilitar la comparación.
-  const normalized = normalizeText(text).toLowerCase();
-
-  // Lista breve de expresiones negativas frecuentes.
-  const negativePatterns = ['no', 'no gracias', 'no me interesa', 'negativo'];
-
-  // Retorna verdadero cuando detecta una intención negativa clara.
-  return negativePatterns.some((pattern) => normalized === pattern || normalized.includes(pattern));
+  const n = normalizeText(text).toLowerCase();
+  const patterns = ['no gracias', 'no me interesa', 'no estoy interesado', 'no, gracias', 'negativo'];
+  return patterns.some((p) => n === p || n.includes(p));
 }
 
-// Parsea la línea de datos enviada por el candidato usando el separador "|".
-function parseSingleLineData(text) {
-  // Separa columnas por pipe y limpia espacios.
-  const columns = text.split('|').map((value) => value.trim());
+// ─────────────────────────────────────────────────────────
+// FAQ — Detección y respuesta de preguntas frecuentes
+// ─────────────────────────────────────────────────────────
 
-  // Valida cantidad exacta de columnas.
-  if (columns.length !== 5) {
-    return { valid: false };
+// Detecta si el mensaje es una pregunta frecuente sobre la vacante y devuelve la respuesta.
+// Retorna null si no es una FAQ.
+function detectFAQ(text) {
+  const n = normalizeText(text).toLowerCase();
+
+  // Horarios
+  if (/horario|hora|jornada|turno|qu[ée] hora/.test(n)) {
+    return `${INFO_VACANTE.horario}\n\n¿Te gustaría postularte?`;
   }
 
-  // Desestructura los campos esperados.
-  const [fullName, documentType, documentNumber, ageText, cityAndZone] = columns;
-
-  // Valida que todos los campos tengan contenido.
-  if (!fullName || !documentType || !documentNumber || !ageText || !cityAndZone) {
-    return { valid: false };
+  // Salario
+  if (/salario|sueldo|pag[ao]|cu[áa]nto (pagan|gana|es el sueldo)|remuneraci[óo]n|plata/.test(n)) {
+    return `${INFO_VACANTE.salario} ${INFO_VACANTE.fechasPago}\n\n¿Te gustaría postularte?`;
   }
 
-  // Convierte y valida edad en rango razonable del flujo.
-  const age = Number(ageText);
-  if (!Number.isInteger(age) || age < 18 || age > 99) {
-    return { valid: false };
+  // Fechas de pago
+  if (/fecha.*(pago|pagan)|cu[áa]ndo pagan|d[íi]a.*(pago|pagan)/.test(n)) {
+    return `${INFO_VACANTE.fechasPago}\n\n¿Te gustaría postularte?`;
   }
 
-  // Retorna estructura lista para guardar en base de datos.
-  return {
-    valid: true,
-    data: {
-      fullName,
-      documentNumber: `${documentType} ${documentNumber}`,
-      age,
-      city: cityAndZone,
-      zone: cityAndZone
+  // Ubicación
+  if (/ubicaci[óo]n|d[óo]nde (es|queda|est[áa])|direcci[óo]n|lugar|sector|sitio/.test(n)) {
+    return `El lugar de trabajo es en ${INFO_VACANTE.ciudad}, sector ${INFO_VACANTE.sector}.\n\n¿Te gustaría postularte?`;
+  }
+
+  // Contrato
+  if (/contrato|tipo de contrato|vinculaci[óo]n|qu[ée] tipo/.test(n)) {
+    return `${INFO_VACANTE.contrato} Incluye todas las prestaciones de ley.\n\n¿Te gustaría postularte?`;
+  }
+
+  // Requisitos
+  if (/requisito|qu[ée] (necesito|piden|se necesita)|condici[óo]n/.test(n)) {
+    return `${INFO_VACANTE.requisitos}\n\n¿Te gustaría postularte?`;
+  }
+
+  // Transporte
+  if (/transporte|moto|bicicleta|bici|c[óo]mo llego/.test(n)) {
+    return `${INFO_VACANTE.transporte}\n\n¿Te gustaría postularte?`;
+  }
+
+  // Cómo aplico (se trata como interés afirmativo en el step GREETING_SENT)
+  if (/c[óo]mo (aplico|me inscribo|hago|postulo)|d[óo]nde me inscribo|quiero aplicar/.test(n)) {
+    return null; // Se manejará como interés afirmativo
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────
+// Parseo inteligente de datos del candidato desde texto libre
+// ─────────────────────────────────────────────────────────
+
+// Lista de ciudades colombianas conocidas para detección.
+const CIUDADES_COLOMBIANAS = [
+  'ibagué', 'ibague', 'bogotá', 'bogota', 'medellín', 'medellin',
+  'cali', 'barranquilla', 'cartagena', 'bucaramanga', 'pereira',
+  'manizales', 'cúcuta', 'cucuta', 'villavicencio', 'pasto',
+  'santa marta', 'montería', 'monteria', 'neiva', 'armenia',
+  'popayán', 'popayan', 'sincelejo', 'valledupar', 'tunja',
+  'florencia', 'quibdó', 'quibdo', 'riohacha', 'yopal',
+  'sogamoso', 'duitama', 'girardot', 'espinal', 'melgar',
+  'honda', 'líbano', 'libano', 'chaparral', 'guamo',
+  'soacha', 'fusagasugá', 'fusagasuga', 'zipaquirá', 'zipaquira',
+  'chía', 'chia', 'cajicá', 'cajica', 'facatativá', 'facatativa',
+  'mosquera', 'funza', 'madrid', 'tocancipá', 'tocancipa'
+];
+
+// Extrae datos del candidato de texto libre usando heurísticas.
+// Retorna un objeto con los campos encontrados (solo los detectados).
+function parseNaturalData(text) {
+  const result = {};
+  let remaining = text;
+
+  // 1. Detectar tipo y número de documento
+  // Patrones: "CC 1234567890", "cédula 1234567890", "mi cedula es 1234567890", "TI 1234567890"
+  const docRegex = /\b(c\.?\s*c\.?|c[ée]dula|t\.?\s*i\.?|tarjeta\s+de\s+identidad|c\.?\s*e\.?|c[ée]dula\s+de\s+extranjer[íi]a|pasaporte|ppt)\s*(?:es|:|\-|#|\.|\s)\s*(\d{6,12})\b/i;
+  const docMatch = remaining.match(docRegex);
+  if (docMatch) {
+    const tipoRaw = docMatch[1].toLowerCase().replace(/\./g, '').replace(/\s+/g, '');
+    const numero = docMatch[2];
+
+    // Mapear tipo de documento a abreviatura estándar
+    const tipoMap = {
+      'cc': 'CC', 'cedula': 'CC', 'cédula': 'CC',
+      'ti': 'TI', 'tarjetadeidentidad': 'TI',
+      'ce': 'CE', 'ceduladeextranjería': 'CE', 'ceduladeextranjeria': 'CE',
+      'pasaporte': 'Pasaporte', 'ppt': 'Pasaporte'
+    };
+    result.documentType = tipoMap[tipoRaw] || tipoRaw.toUpperCase();
+    result.documentNumber = numero;
+
+    // Remover del texto restante para no confundir con otros campos
+    remaining = remaining.replace(docMatch[0], ' ');
+  }
+
+  // Si no se encontró con prefijo, buscar un número largo que pueda ser documento (7-12 dígitos).
+  // No debe confundirse con la edad (1-2 dígitos).
+  if (!result.documentNumber) {
+    const soloNumero = remaining.match(/(?:^|\s)(\d{7,12})(?:\s|$)/m);
+    if (soloNumero) {
+      result.documentNumber = soloNumero[1];
+      remaining = remaining.replace(soloNumero[1], ' ');
     }
-  };
+  }
+
+  // 2. Detectar edad
+  // Patrones: "25 años", "tengo 25", "edad 25", "25 años de edad"
+  const edadRegex = /\b(?:tengo\s+)?(\d{1,2})\s*(?:años?|a[ñn]os?)(?:\s+de\s+edad)?\b/i;
+  const edadMatch = remaining.match(edadRegex);
+  if (edadMatch) {
+    const edad = parseInt(edadMatch[1], 10);
+    if (edad >= 18 && edad <= 65) {
+      result.age = edad;
+      remaining = remaining.replace(edadMatch[0], ' ');
+    }
+  }
+
+  // Si no se encontró con "años", buscar "edad: 25" o "edad 25"
+  if (!result.age) {
+    const edadAlt = remaining.match(/\bedad\s*[:\-]?\s*(\d{1,2})\b/i);
+    if (edadAlt) {
+      const edad = parseInt(edadAlt[1], 10);
+      if (edad >= 18 && edad <= 65) {
+        result.age = edad;
+        remaining = remaining.replace(edadAlt[0], ' ');
+      }
+    }
+  }
+
+  // 3. Detectar barrio/zona (antes de ciudad para no confundir)
+  // Patrones: "barrio centro", "zona industrial", "sector el salado", "localidad kennedy"
+  const barrioRegex = /\b(?:barrio|zona|localidad|sector|vereda)\s*[:\-]?\s*(.+?)(?:\s*[,.\n]|$)/i;
+  const barrioMatch = remaining.match(barrioRegex);
+  if (barrioMatch) {
+    result.zone = barrioMatch[1].trim();
+    remaining = remaining.replace(barrioMatch[0], ' ');
+  }
+
+  // 4. Detectar ciudad
+  const normalizedRemaining = remaining.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  for (const ciudad of CIUDADES_COLOMBIANAS) {
+    const ciudadNorm = ciudad.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (normalizedRemaining.includes(ciudadNorm)) {
+      // Capitalizar la primera letra de cada palabra
+      result.city = ciudad.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      // Correcciones de tildes para ciudades principales
+      const correcciones = {
+        'Ibague': 'Ibagué', 'Bogota': 'Bogotá', 'Medellin': 'Medellín',
+        'Cucuta': 'Cúcuta', 'Monteria': 'Montería', 'Popayan': 'Popayán',
+        'Quibdo': 'Quibdó', 'Libano': 'Líbano', 'Fusagasuga': 'Fusagasugá',
+        'Zipaquira': 'Zipaquirá', 'Chia': 'Chía', 'Cajica': 'Cajicá',
+        'Facatativa': 'Facatativá', 'Tocancipa': 'Tocancipá'
+      };
+      result.city = correcciones[result.city] || result.city;
+      break;
+    }
+  }
+
+  // Si hay un guión o "de" después de ciudad, puede ser el barrio
+  if (result.city && !result.zone) {
+    const cityIdx = remaining.toLowerCase().indexOf(result.city.toLowerCase());
+    if (cityIdx !== -1) {
+      const afterCity = remaining.substring(cityIdx + result.city.length);
+      const barrioDespues = afterCity.match(/^\s*[-–,]\s*(.+?)(?:\s*[,.\n]|$)/);
+      if (barrioDespues) {
+        result.zone = barrioDespues[1].trim();
+      }
+    }
+  }
+
+  // 5. Detectar nombre completo
+  // El nombre es generalmente lo que queda al inicio del texto, antes de datos numéricos.
+  // Patrones: "me llamo Juan Pérez", "soy Juan Pérez", "mi nombre es Juan Pérez", "nombre: Juan Pérez"
+  const nombrePrefijo = remaining.match(/(?:me\s+llamo|soy|mi\s+nombre\s+es|nombre\s*[:\-]?)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ][A-ZÁÉÍÓÚÑa-záéíóúñ ]{2,49})/i);
+  if (nombrePrefijo) {
+    let nombre = nombrePrefijo[1].trim();
+    // Limpiar si el nombre incluye conectores, ciudades o datos que no son parte del nombre
+    nombre = nombre.replace(/\s*(tengo|cedula|cédula|c\.?c\.?|de\s+\d|vivo|\d+\s*años?|ibagu[ée]|bogot[áa]|medell[íi]n|cali|barranquilla).*$/i, '').trim();
+    if (nombre.length >= 3 && nombre.split(/\s+/).length >= 2) {
+      result.fullName = capitalizeWords(nombre);
+    }
+  }
+
+  // Si no hay prefijo, intentar tomar la primera línea o segmento que parezca nombre
+  if (!result.fullName) {
+    // Tomar la primera línea del texto original para buscar nombre
+    const firstLine = text.split(/[\n,]/)[0].trim();
+    // Construir regex de ciudades para limpiar del candidato a nombre
+    const ciudadesPattern = CIUDADES_COLOMBIANAS.join('|');
+    const ciudadesRegex = new RegExp(`\\b(${ciudadesPattern})\\b`, 'gi');
+    // Limpiar de números, palabras clave, conectores y ciudades
+    const cleanedForName = firstLine
+      .replace(/\d+/g, '')
+      .replace(/\b(tengo|años?|cedula|cédula|c\.?c\.?|t\.?i\.?|c\.?e\.?|vivo|en|el|la|los|las|del|de|barrio|zona|sector|localidad|edad|soy|me\s+llamo|mi\s+nombre\s+es)\b/gi, '')
+      .replace(ciudadesRegex, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Validar que parece un nombre (al menos dos palabras, solo letras)
+    if (/^[A-ZÁÉÍÓÚÑa-záéíóúñ]+(\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+){1,5}$/.test(cleanedForName) && cleanedForName.length >= 5) {
+      result.fullName = capitalizeWords(cleanedForName);
+    }
+  }
+
+  return result;
 }
+
+// Capitaliza la primera letra de cada palabra (soporta tildes).
+function capitalizeWords(str) {
+  return str.toLowerCase().replace(/(^|\s)(\S)/g, (_m, space, char) => space + char.toUpperCase());
+}
+
+// Determina qué campos faltan de los datos requeridos.
+function getMissingFields(candidate) {
+  const missing = [];
+  if (!candidate.fullName) missing.push('nombre completo');
+  if (!candidate.documentNumber) missing.push('tipo y número de documento');
+  if (!candidate.age) missing.push('edad');
+  if (!candidate.city) missing.push('ciudad');
+  if (!candidate.zone) missing.push('barrio o zona');
+  return missing;
+}
+
+// Genera un mensaje amigable pidiendo solo los datos faltantes.
+function buildMissingFieldsMessage(candidate, missing) {
+  const nombre = candidate.fullName ? candidate.fullName.split(' ')[0] : '';
+  const prefix = nombre ? `Gracias ${nombre}, ya casi terminamos. ` : '';
+
+  if (missing.length === 1) {
+    return `${prefix}Solo me falta tu ${missing[0]}.`;
+  }
+
+  const last = missing.pop();
+  return `${prefix}Me faltan: ${missing.join(', ')} y ${last}.`;
+}
+
+// Genera un mensaje de confirmación con los datos del candidato.
+function buildConfirmationMessage(candidate) {
+  const lines = [
+    `Estos son tus datos:`,
+    ``,
+    `*Nombre:* ${candidate.fullName}`,
+    `*Documento:* ${candidate.documentType || 'CC'} ${candidate.documentNumber}`,
+    `*Edad:* ${candidate.age} años`,
+    `*Ciudad:* ${candidate.city}`,
+    `*Barrio/Zona:* ${candidate.zone}`,
+    ``,
+    `¿Los datos son correctos? Responde *sí* para confirmar o *no* para corregirlos.`
+  ];
+  return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────
+// Persistencia de mensajes (sin cambios funcionales)
+// ─────────────────────────────────────────────────────────
 
 // Guarda un mensaje entrante y controla duplicados por identificador de WhatsApp.
 async function saveInboundMessage(prisma, candidateId, message, body, type) {
-  // Inicia un bloque controlado para manejar duplicados sin romper el flujo.
   try {
-    // Inserta el mensaje entrante en la tabla de mensajes.
     await prisma.message.create({
-      // Define los datos a persistir.
       data: {
-        // Relaciona el mensaje con el candidato.
         candidateId,
-        // Guarda el id del mensaje de WhatsApp para idempotencia.
         waMessageId: message.id,
-        // Marca la dirección del mensaje como entrante.
         direction: MessageDirection.INBOUND,
-        // Guarda el tipo del mensaje.
         messageType: type,
-        // Guarda un cuerpo textual útil para auditoría rápida.
         body,
-        // Guarda el payload completo.
         rawPayload: message
       }
     });
-
-    // Retorna verdadero cuando el mensaje fue guardado correctamente.
     return true;
   } catch (error) {
-    // Convierte el error a texto para identificar una restricción única.
     if (String(error?.message || '').includes('Unique constraint')) {
-      // Retorna falso si el mensaje ya existía y no debe reprocesarse.
       return false;
     }
-
-    // Relanza cualquier otro error para no ocultar fallas reales.
     throw error;
   }
 }
 
 // Guarda un mensaje saliente del bot.
 async function saveOutboundMessage(prisma, candidateId, body) {
-  // Inserta un nuevo mensaje saliente.
   await prisma.message.create({
-    // Define los datos del mensaje.
     data: {
-      // Relaciona el mensaje con el candidato.
       candidateId,
-      // Marca la dirección del mensaje como saliente.
       direction: MessageDirection.OUTBOUND,
-      // Marca el tipo del mensaje como texto.
       messageType: MessageType.TEXT,
-      // Guarda el cuerpo del mensaje.
       body,
-      // Guarda un payload mínimo para auditoría.
       rawPayload: { body }
     }
   });
@@ -171,316 +391,294 @@ async function saveOutboundMessage(prisma, candidateId, body) {
 
 // Envía una respuesta por WhatsApp y luego la persiste en la base de datos.
 async function reply(prisma, candidateId, to, body) {
-  // Envía el texto al número del candidato usando Cloud API.
   await sendTextMessage(to, body);
-
-  // Guarda la traza del mensaje saliente.
   await saveOutboundMessage(prisma, candidateId, body);
 }
 
-// Procesa un mensaje de texto en función del estado actual del candidato.
+// ─────────────────────────────────────────────────────────
+// Procesamiento del flujo conversacional
+// ─────────────────────────────────────────────────────────
+
+// Procesa un mensaje de texto según el paso actual del candidato.
 async function processText(prisma, candidate, from, text) {
-  // Normaliza el texto entrante.
   const cleanText = normalizeText(text);
 
-  // Evalúa si el candidato aún está en el menú principal.
+  // ── MENU: Primer contacto — enviar saludo con info de vacante ──
   if (candidate.currentStep === ConversationStep.MENU) {
-    // Primer contacto: comparte saludo + vacante y deja al candidato en espera de confirmación de interés.
     await prisma.candidate.update({
       where: { id: candidate.id },
-      data: { currentStep: ConversationStep.ASK_FULL_NAME }
+      data: { currentStep: ConversationStep.GREETING_SENT }
     });
-
-    // Envía el saludo inicial solicitado en un único mensaje.
-    await reply(prisma, candidate.id, from, INITIAL_GREETING_TEXT);
-
-    // Termina la ejecución del flujo de este mensaje.
+    await reply(prisma, candidate.id, from, SALUDO_INICIAL);
     return;
   }
 
-  // Reglas para candidatos que ya completaron el flujo: nunca reiniciar.
+  // ── DONE: Candidato ya registrado ──
   if (candidate.currentStep === ConversationStep.DONE) {
-    // Retorna siempre el mensaje fijo para evitar reinicios.
-    await reply(prisma, candidate.id, from, ALREADY_COMPLETED_TEXT);
-
-    // Termina la ejecución.
+    await reply(prisma, candidate.id, from, MENSAJE_YA_REGISTRADO);
     return;
   }
 
-  // Paso semántico: espera de confirmación de interés.
-  if (candidate.currentStep === ConversationStep.ASK_FULL_NAME) {
-    // Si confirma interés, avanza a captura de datos en una sola línea.
+  // ── GREETING_SENT: Esperando respuesta de interés o FAQ ──
+  if (candidate.currentStep === ConversationStep.GREETING_SENT) {
+    // Primero verificar si es una FAQ
+    const faqResponse = detectFAQ(cleanText);
+    if (faqResponse) {
+      await reply(prisma, candidate.id, from, faqResponse);
+      return;
+    }
+
+    // Si confirma interés, pasar a captura de datos
     if (isAffirmativeInterest(cleanText)) {
       await prisma.candidate.update({
         where: { id: candidate.id },
-        data: { currentStep: ConversationStep.ASK_DOCUMENT }
+        data: { currentStep: ConversationStep.COLLECTING_DATA }
+      });
+      await reply(prisma, candidate.id, from, SOLICITAR_DATOS);
+      return;
+    }
+
+    // Si responde negativamente
+    if (isNegativeInterest(cleanText)) {
+      await reply(
+        prisma, candidate.id, from,
+        'Entendido, no hay problema. Si más adelante te interesa, aquí estaremos para ayudarte. ¡Que tengas buen día!'
+      );
+      return;
+    }
+
+    // Intentar detectar si el mensaje contiene datos (el candidato puede enviar datos directamente)
+    const parsedData = parseNaturalData(cleanText);
+    const fieldsFound = Object.keys(parsedData).length;
+    if (fieldsFound >= 2) {
+      // El candidato ya está enviando datos — mover a COLLECTING_DATA y procesarlos
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          ...parsedData,
+          currentStep: ConversationStep.COLLECTING_DATA
+        }
       });
 
-      await reply(prisma, candidate.id, from, SINGLE_LINE_DATA_TEXT);
-      return;
-    }
+      const updatedCandidate = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+      const missing = getMissingFields(updatedCandidate);
 
-    // Si responde de forma negativa, no avanza al registro.
-    if (isNegativeInterest(cleanText)) {
-      await reply(prisma, candidate.id, from, 'Entendido. Te dejamos la información de la vacante por aquí:\n' + INFO_TEXT);
-      return;
-    }
-
-    // Si la intención no es clara, mantiene el paso y recuerda cómo continuar.
-    await reply(prisma, candidate.id, from, 'Si estás interesado en continuar, responde: "sí" o "me interesa".');
-    return;
-  }
-
-  // Paso semántico: espera de datos en una sola línea.
-  if (candidate.currentStep === ConversationStep.ASK_DOCUMENT) {
-    // Intenta parsear la línea con el formato requerido.
-    const parsed = parseSingleLineData(cleanText);
-
-    // Si el formato es inválido, solicita nuevamente la línea exacta.
-    if (!parsed.valid) {
-      await reply(prisma, candidate.id, from, SINGLE_LINE_DATA_TEXT);
-      return;
-    }
-
-    // Guarda todos los datos de una sola vez y pasa a espera de hoja de vida.
-    await prisma.candidate.update({
-      where: { id: candidate.id },
-      data: {
-        ...parsed.data,
-        status: CandidateStatus.PENDIENTE_CV,
-        currentStep: ConversationStep.ASK_CV
+      if (missing.length === 0) {
+        // Tiene todos los datos, pasar a confirmación
+        await prisma.candidate.update({
+          where: { id: candidate.id },
+          data: { currentStep: ConversationStep.CONFIRMING_DATA }
+        });
+        await reply(prisma, candidate.id, from, buildConfirmationMessage(updatedCandidate));
+      } else {
+        await reply(prisma, candidate.id, from, buildMissingFieldsMessage(updatedCandidate, missing));
       }
-    });
-
-    // Solicita la hoja de vida con el texto definido.
-    await reply(prisma, candidate.id, from, ASK_CV_TEXT);
-
-    // Termina la ejecución.
-    return;
-  }
-
-  // Si el candidato ya está en espera del CV y vuelve a escribir texto.
-  if (candidate.currentStep === ConversationStep.ASK_CV) {
-    // Repite la instrucción de envío de hoja de vida.
-    await reply(prisma, candidate.id, from, 'Solo falta tu hoja de vida. Envíala en PDF o Word en este chat.');
-
-    // Termina la ejecución.
-    return;
-  }
-
-  // Para cualquier estado legado no previsto, no reinicia y reconduce al formato consolidado.
-  await reply(prisma, candidate.id, from, SINGLE_LINE_DATA_TEXT);
-}
-
-// Procesa un documento recibido por WhatsApp y lo guarda dentro de PostgreSQL.
-async function processDocument(prisma, candidate, from, documentMessage) {
-  // Si el candidato ya finalizó, no reprocesa documentos ni reinicia el flujo.
-  if (candidate.currentStep === ConversationStep.DONE) {
-    await reply(prisma, candidate.id, from, ALREADY_COMPLETED_TEXT);
-    return;
-  }
-
-  // Si todavía no está en el paso de CV, recuerda el orden correcto del proceso.
-  if (candidate.currentStep !== ConversationStep.ASK_CV) {
-    await reply(prisma, candidate.id, from, 'Antes de enviar tu hoja de vida debes completar el paso de datos.');
-    await reply(prisma, candidate.id, from, SINGLE_LINE_DATA_TEXT);
-    return;
-  }
-
-  // Obtiene el tipo MIME del documento recibido.
-  const mimeType = documentMessage.document?.mime_type || '';
-
-  // Obtiene el nombre del archivo o usa un nombre genérico.
-  const fileName = documentMessage.document?.filename || 'cv';
-
-  // Obtiene el media id entregado por WhatsApp para descargar el archivo.
-  const mediaId = documentMessage.document?.id;
-
-  // Define los tipos de archivo permitidos para la contingencia.
-  const allowed = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ];
-
-  // Valida que exista el media id y que el archivo sea de un tipo permitido.
-  if (!mediaId || !allowed.includes(mimeType)) {
-    // Responde con mensaje de archivo inválido.
-    await reply(prisma, candidate.id, from, 'Archivo inválido. Envía tu hoja de vida en PDF o Word.');
-
-    // Termina la ejecución.
-    return;
-  }
-
-  // Consulta la metadata del medio en Meta para obtener la URL temporal de descarga.
-  const media = await fetchMediaMetadata(mediaId);
-
-  // Descarga el binario completo del archivo.
-  const buffer = await downloadMedia(media.url);
-
-  // Guarda el archivo binario y actualiza el estado del candidato como postulación completa.
-  await prisma.candidate.update({
-    // Ubica el candidato.
-    where: { id: candidate.id },
-    // Actualiza metadatos y contenido del CV.
-    data: {
-      cvOriginalName: fileName,
-      cvMimeType: mimeType,
-      cvData: buffer,
-      currentStep: ConversationStep.DONE,
-      status: CandidateStatus.POSTULACION_COMPLETA
+      return;
     }
-  });
 
-  // Envía confirmación final al candidato.
-  await reply(
-    prisma,
-    candidate.id,
-    from,
-    'Tu postulación fue recibida correctamente. El equipo de reclutamiento revisará tu información y te contactará si continúas en el proceso.'
-  );
+    // Si no es FAQ, ni interés, ni datos — pedir clarificación
+    await reply(
+      prisma, candidate.id, from,
+      '¿Te gustaría postularte a la vacante? Si tienes alguna pregunta sobre el puesto, con gusto te la resuelvo.'
+    );
+    return;
+  }
+
+  // ── COLLECTING_DATA: Capturando datos del candidato de forma natural ──
+  if (candidate.currentStep === ConversationStep.COLLECTING_DATA) {
+    // Parsear datos del mensaje
+    const parsedData = parseNaturalData(cleanText);
+
+    // Solo actualizar los campos que se detectaron y que aún faltan
+    const updateData = {};
+    if (parsedData.fullName && !candidate.fullName) updateData.fullName = parsedData.fullName;
+    if (parsedData.documentType && !candidate.documentType) updateData.documentType = parsedData.documentType;
+    if (parsedData.documentNumber && !candidate.documentNumber) updateData.documentNumber = parsedData.documentNumber;
+    if (parsedData.age && !candidate.age) updateData.age = parsedData.age;
+    if (parsedData.city && !candidate.city) updateData.city = parsedData.city;
+    if (parsedData.zone && !candidate.zone) updateData.zone = parsedData.zone;
+
+    // Si no se detectó ningún dato nuevo y hay exactamente un campo faltante,
+    // intentar asignar el texto completo a ese campo.
+    const currentMissing = getMissingFields(candidate);
+    if (Object.keys(updateData).length === 0 && currentMissing.length === 1) {
+      const field = currentMissing[0];
+      if (field === 'nombre completo') updateData.fullName = capitalizeWords(cleanText);
+      else if (field === 'tipo y número de documento') updateData.documentNumber = cleanText;
+      else if (field === 'edad') {
+        const num = parseInt(cleanText, 10);
+        if (num >= 18 && num <= 65) updateData.age = num;
+      }
+      else if (field === 'ciudad') updateData.city = capitalizeWords(cleanText);
+      else if (field === 'barrio o zona') updateData.zone = capitalizeWords(cleanText);
+    }
+
+    // Actualizar candidato si hay datos nuevos
+    if (Object.keys(updateData).length > 0) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: updateData
+      });
+    }
+
+    // Consultar estado actualizado del candidato
+    const updatedCandidate = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+    const missing = getMissingFields(updatedCandidate);
+
+    if (missing.length === 0) {
+      // Todos los datos completos — pasar a confirmación
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { currentStep: ConversationStep.CONFIRMING_DATA }
+      });
+      await reply(prisma, candidate.id, from, buildConfirmationMessage(updatedCandidate));
+    } else {
+      // Aún faltan datos
+      if (Object.keys(updateData).length > 0) {
+        // Se recibieron datos parciales, pedir los faltantes
+        await reply(prisma, candidate.id, from, buildMissingFieldsMessage(updatedCandidate, missing));
+      } else {
+        // No se detectó ningún dato — orientar al candidato
+        await reply(
+          prisma, candidate.id, from,
+          `No logré identificar los datos en tu mensaje. ${buildMissingFieldsMessage(updatedCandidate, missing)}\n\nPuedes enviarlos como prefieras, por ejemplo: "Juan Pérez, CC 1234567890, 25 años, Ibagué, barrio Centro".`
+        );
+      }
+    }
+    return;
+  }
+
+  // ── CONFIRMING_DATA: Esperando confirmación del candidato ──
+  if (candidate.currentStep === ConversationStep.CONFIRMING_DATA) {
+    const n = cleanText.toLowerCase();
+
+    // Si confirma los datos
+    if (/^(s[ií]|correcto|est[áa] bien|confirmo|listo|dale|ok|okay|perfecto|todo bien)$/i.test(n) ||
+        /\bs[ií]\b/.test(n) && n.length < 30) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          currentStep: ConversationStep.DONE,
+          status: CandidateStatus.REGISTRADO
+        }
+      });
+
+      const nombre = candidate.fullName ? candidate.fullName.split(' ')[0] : '';
+      await reply(
+        prisma, candidate.id, from,
+        `¡Listo${nombre ? ' ' + nombre : ''}! Tu información ha sido registrada correctamente.\n\nLa entrevista se realizará el *8 de abril*. Debes estar atento/a al llamado o aviso donde te confirmaremos el lugar y la hora exacta.\n\n¡Mucho éxito en el proceso!`
+      );
+      return;
+    }
+
+    // Si quiere corregir los datos
+    if (/^(no|negativo|incorrecto|mal|est[áa] mal|cambiar|corregir)/i.test(n)) {
+      // Limpiar datos del candidato y volver a COLLECTING_DATA
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          fullName: null,
+          documentType: null,
+          documentNumber: null,
+          age: null,
+          city: null,
+          zone: null,
+          currentStep: ConversationStep.COLLECTING_DATA
+        }
+      });
+
+      await reply(
+        prisma, candidate.id, from,
+        'Sin problema, vamos de nuevo. Por favor envíame tus datos:\n\n- Nombre completo\n- Tipo y número de documento\n- Edad\n- Ciudad\n- Barrio o zona'
+      );
+      return;
+    }
+
+    // Si la respuesta no es clara
+    await reply(
+      prisma, candidate.id, from,
+      'Por favor responde *sí* si los datos son correctos, o *no* si deseas corregirlos.'
+    );
+    return;
+  }
 }
 
-// Expone el router principal del webhook.
+// ─────────────────────────────────────────────────────────
+// Router principal del webhook
+// ─────────────────────────────────────────────────────────
+
 export function webhookRouter(prisma) {
-  // Crea una nueva instancia de router de Express.
   const router = express.Router();
 
-  // Define el endpoint GET que usa Meta para verificar el webhook.
+  // Endpoint GET para verificación del webhook por Meta.
   router.get('/', (req, res) => {
-    // Lee el modo de verificación enviado por Meta.
     const mode = req.query['hub.mode'];
-
-    // Lee el token de verificación enviado por Meta.
     const token = req.query['hub.verify_token'];
-
-    // Lee el challenge que Meta espera recibir de vuelta.
     const challenge = req.query['hub.challenge'];
 
-    // Valida que el modo sea subscribe y que el token coincida con la variable de entorno.
     if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
-      // Responde con el challenge para que Meta apruebe el webhook.
       return res.status(200).send(challenge);
     }
-
-    // Si no coincide la validación, responde prohibido.
     return res.sendStatus(403);
   });
 
-  // Define el endpoint POST que recibe mensajes reales desde Meta.
+  // Endpoint POST que recibe mensajes reales desde Meta.
   router.post('/', async (req, res, next) => {
-    // Inicia bloque controlado para capturar errores y delegarlos al middleware global.
     try {
-      // Extrae la lista de mensajes del payload del webhook.
       const messages = extractMessages(req.body);
 
-      // Si no hay mensajes, responde 200 para que Meta no reintente innecesariamente.
       if (!messages.length) {
         return res.sendStatus(200);
       }
 
-      // Recorre cada mensaje recibido en el webhook.
       for (const message of messages) {
-        // Obtiene el número de origen del mensaje.
         const from = message.from;
+        if (!from) continue;
 
-        // Si no existe origen, ignora el mensaje.
-        if (!from) {
-          continue;
-        }
-
-        // Busca o crea el candidato asociado a ese teléfono.
+        // Busca o crea el candidato asociado al teléfono.
         const candidate = await prisma.candidate.upsert({
-          // Usa el teléfono como llave única.
           where: { phone: from },
-          // No actualiza nada en este punto si ya existe.
           update: {},
-          // Crea un candidato vacío si no existe.
           create: { phone: from }
         });
 
-        // Si el mensaje es de texto, ejecuta el flujo de texto.
+        // Procesar mensajes de texto.
         if (message.type === 'text') {
-          // Guarda el mensaje entrante y controla duplicados.
           const wasNew = await saveInboundMessage(
-            prisma,
-            candidate.id,
-            message,
-            message.text?.body || '',
-            MessageType.TEXT
+            prisma, candidate.id, message,
+            message.text?.body || '', MessageType.TEXT
           );
+          if (!wasNew) continue;
 
-          // Si el mensaje ya estaba guardado, omite su reprocesamiento.
-          if (!wasNew) {
-            continue;
-          }
-
-          // Consulta el estado actualizado del candidato antes de procesar el texto.
           const freshCandidate = await prisma.candidate.findUnique({
             where: { id: candidate.id }
           });
-
-          // Procesa el texto según el paso conversacional.
           await processText(prisma, freshCandidate, from, message.text?.body || '');
-
-          // Continúa con el siguiente mensaje del lote.
           continue;
         }
 
-        // Si el mensaje es un documento, ejecuta el flujo de archivo.
-        if (message.type === 'document') {
-          // Guarda el mensaje entrante y controla duplicados.
-          const wasNew = await saveInboundMessage(
-            prisma,
-            candidate.id,
-            message,
-            message.document?.filename || '',
-            MessageType.DOCUMENT
-          );
+        // Guardar cualquier otro tipo de mensaje para auditoría.
+        const bodyForLog = message.document?.filename || '';
+        const typeForLog = message.type === 'document' ? MessageType.DOCUMENT : MessageType.UNKNOWN;
+        const wasNew = await saveInboundMessage(prisma, candidate.id, message, bodyForLog, typeForLog);
+        if (!wasNew) continue;
 
-          // Si ya estaba guardado, no lo procesa otra vez.
-          if (!wasNew) {
-            continue;
-          }
-
-          // Consulta el candidato actualizado.
-          const freshCandidate = await prisma.candidate.findUnique({
-            where: { id: candidate.id }
-          });
-
-          // Procesa el documento recibido.
-          await processDocument(prisma, freshCandidate, from, message);
-
-          // Continúa con el siguiente mensaje del lote.
-          continue;
-        }
-
-        // Guarda mensajes no soportados para auditoría.
-        const wasNew = await saveInboundMessage(prisma, candidate.id, message, '', MessageType.UNKNOWN);
-
-        // Si el mensaje ya estaba registrado, omite reprocesamiento.
-        if (!wasNew) {
-          continue;
-        }
-
-        // Reglas para flujo finalizado: nunca reiniciar ante tipos no soportados.
+        // Responder según el estado del candidato.
         if (candidate.currentStep === ConversationStep.DONE) {
-          await reply(prisma, candidate.id, from, ALREADY_COMPLETED_TEXT);
-          continue;
+          await reply(prisma, candidate.id, from, MENSAJE_YA_REGISTRADO);
+        } else {
+          await reply(
+            prisma, candidate.id, from,
+            'Por ahora solo puedo procesar mensajes de texto. Por favor escríbeme tus datos en un mensaje.'
+          );
         }
-
-        // Responde indicando que solo se soporta texto y documentos.
-        await reply(prisma, candidate.id, from, 'Por ahora solo puedo procesar texto y hoja de vida en PDF o Word.');
       }
 
-      // Responde 200 al finalizar para confirmar recepción a Meta.
       res.sendStatus(200);
     } catch (error) {
-      // Envía el error al middleware global de Express.
       next(error);
     }
   });
 
-  // Retorna el router listo para ser montado en el servidor.
   return router;
 }
