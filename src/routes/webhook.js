@@ -28,9 +28,20 @@ const DESCARTE_MSG = 'Gracias por tu interés. En este caso no es posible contin
 const CIERRE_NO_INTERES = 'Entendido. Si más adelante deseas continuar con la postulación, puedes volver a escribirme y con gusto retomamos el proceso.';
 const MENSAJE_FINAL = 'Tu información ya fue recibida correctamente. Por favor espera a que el equipo de reclutamiento se comunique contigo.';
 const GUIA_CONTINUAR = 'Puedo ayudarte a continuar con la postulación. Si deseas seguir, envíame tus datos y te voy guiando.';
+const NO_INTERESADO_REOPEN_GUIDE = 'Si deseas retomar tu postulación, escríbeme que quieres continuar o envíame tus datos y con gusto seguimos.';
 
 function normalizeText(text = '') {
   return text.trim();
+}
+
+function normalizeIntentText(text = '') {
+  return normalizeText(text)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function sleep(ms) {
@@ -61,8 +72,28 @@ function isNegativeInterest(text) {
   return /^(no+|nop+|negativo)$|no gracias|no me interesa|no estoy interesad|no deseo|paso|ya no|prefiero no|no quiero continuar|no quiero seguir|no contin[uú]o|no continuar/i.test(n);
 }
 
-function isReopenCommand(text) {
-  return normalizeText(text) === 'QUIERO CONTINUAR';
+function isReopenIntent(text) {
+  const n = normalizeIntentText(text);
+  if (!n) return false;
+
+  const intentPhrases = [
+    'quiero continuar',
+    'quiero seguir',
+    'si quiero',
+    'si me interesa',
+    'me interesa',
+    'quiero postularme',
+    'deseo continuar',
+    'retomar',
+    'retomar proceso',
+    'quiero volver',
+    'ahora si',
+    'continuemos'
+  ];
+
+  if (intentPhrases.some((phrase) => n === phrase || n.includes(phrase))) return true;
+
+  return /(quiero|deseo|vamos|continuemos|retomar|volver).*(continuar|seguir|postular|retomar|proceso)/.test(n);
 }
 
 function shouldRejectByRequirements(text, parsed = {}) {
@@ -265,7 +296,9 @@ function buildCapturedSummary(parsedData) {
     transportMode: 'medio de transporte'
   };
 
-  const entries = Object.entries(parsedData)
+  const summaryFields = Object.keys(labels);
+  const entries = summaryFields
+    .map((key) => [key, parsedData?.[key]])
     .filter(([, value]) => value !== null && value !== undefined && value !== '')
     .map(([key, value]) => `${labels[key] || key}: ${value}`);
 
@@ -322,8 +355,23 @@ async function processText(prisma, candidate, from, text) {
   const cleanText = normalizeText(text);
   const hasDataIntent = containsCandidateData(cleanText);
 
-  if (candidate.status === CandidateStatus.NO_INTERESADO && isReopenCommand(cleanText)) {
-    const missing = getMissingFields(candidate);
+  if (candidate.status === CandidateStatus.NO_INTERESADO) {
+    const hasReopenIntent = isReopenIntent(cleanText);
+    if (!hasReopenIntent && !hasDataIntent) {
+      await reply(prisma, candidate.id, from, NO_INTERESADO_REOPEN_GUIDE);
+      return;
+    }
+
+    const parsedData = hasDataIntent ? parseNaturalData(cleanText) : {};
+    if (Object.keys(parsedData).length) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { ...parsedData }
+      });
+    }
+
+    const refreshed = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+    const missing = getMissingFields(refreshed);
     if (missing.length === 0) {
       await prisma.candidate.update({
         where: { id: candidate.id },
@@ -337,16 +385,30 @@ async function processText(prisma, candidate, from, text) {
       where: { id: candidate.id },
       data: { status: CandidateStatus.NUEVO, currentStep: ConversationStep.COLLECTING_DATA }
     });
-    await reply(prisma, candidate.id, from, `Perfecto, reactivamos tu postulación. Conservé tus datos y solo faltan: ${missing.join(', ')}.`);
+    await reply(prisma, candidate.id, from, `Perfecto, retomamos tu postulación. Conservé tus datos y solo faltan: ${missing.join(', ')}.`);
     return;
   }
 
-  if (isNegativeInterest(cleanText) && candidate.status !== CandidateStatus.RECHAZADO) {
+  const canMoveToNoInteresado = ![
+    CandidateStatus.RECHAZADO,
+    CandidateStatus.REGISTRADO
+  ].includes(candidate.status);
+  if (isNegativeInterest(cleanText) && canMoveToNoInteresado) {
     await prisma.candidate.update({
       where: { id: candidate.id },
       data: { status: CandidateStatus.NO_INTERESADO, currentStep: ConversationStep.DONE }
     });
     await reply(prisma, candidate.id, from, CIERRE_NO_INTERES);
+    return;
+  }
+
+  if (isNegativeInterest(cleanText) && candidate.status === CandidateStatus.REGISTRADO) {
+    await reply(prisma, candidate.id, from, MENSAJE_FINAL);
+    return;
+  }
+
+  if (isNegativeInterest(cleanText) && candidate.status === CandidateStatus.RECHAZADO) {
+    await reply(prisma, candidate.id, from, DESCARTE_MSG);
     return;
   }
 
@@ -388,7 +450,7 @@ async function processText(prisma, candidate, from, text) {
           await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.DONE, status: CandidateStatus.REGISTRADO } });
           await reply(prisma, candidate.id, from, MENSAJE_FINAL);
         } else {
-          const summary = buildCapturedSummary(parsedData);
+          const summary = buildCapturedSummary(updated);
           await reply(prisma, candidate.id, from, `${summary} Para continuar solo me falta: ${missing.join(', ')}`);
         }
         return;
@@ -411,7 +473,7 @@ async function processText(prisma, candidate, from, text) {
         await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.DONE, status: CandidateStatus.REGISTRADO } });
         await reply(prisma, candidate.id, from, MENSAJE_FINAL);
       } else {
-        const summary = buildCapturedSummary(parsedData);
+        const summary = buildCapturedSummary(updated);
         await reply(prisma, candidate.id, from, `${summary} Para continuar solo me falta: ${missing.join(', ')}`);
       }
       return;
@@ -450,7 +512,7 @@ async function processText(prisma, candidate, from, text) {
       return;
     }
 
-    const summary = buildCapturedSummary(parsedData);
+    const summary = buildCapturedSummary(updated);
     const response = summary
       ? `${summary} Para continuar solo me falta: ${missing.join(', ')}`
       : `Gracias. Para continuar solo me falta: ${missing.join(', ')}`;
