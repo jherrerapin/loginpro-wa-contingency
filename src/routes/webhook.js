@@ -18,28 +18,27 @@ const INFO_VACANTE = {
   cargo: 'Auxiliar de Cargue y Descargue',
   genero: 'personal masculino',
   ciudad: 'Ibagué',
-  sector: 'Almacafé',
-  horario: 'Jornada flexible: puede iniciar entre 6:00 a.m. y 10:00 a.m., termina según la operación. Horarios rotativos diurnos, de lunes a domingo con un día compensatorio.',
+  sector: 'Aeropuerto',
+  horario: 'Turnos rotativos de lunes a domingo, con un día compensatorio. Se requiere disponibilidad para turnos rotativos.',
   salario: 'Salario Mínimo Mensual Legal Vigente (SMMLV) con prestaciones de ley.',
-  fechasPago: 'Los días 5 y 20 de cada mes.',
+  fechasPago: 'Pago quincenal.',
   contrato: 'Contrato por obra labor directamente con la empresa.',
   transporte: 'Debe contar con medio de transporte propio: moto o bicicleta.',
-  requisitos: 'Ser mayor de edad, contar con documento de identidad vigente y tener medio de transporte (moto o bicicleta).'
+  requisitos: 'Ser mayor de edad (18 años) y menor de 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT (Permiso por Protección Temporal) vigente. Contar con medio de transporte propio (moto o bicicleta).'
 };
 
 // Texto formateado de la vacante para compartir en el saludo.
 const INFO_TEXT = `*Vacante: ${INFO_VACANTE.cargo} (${INFO_VACANTE.genero})*
 
-Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO_VACANTE.ciudad}. El lugar de trabajo es en el sector de ${INFO_VACANTE.sector}.
+Estamos en búsqueda de Auxiliares de Cargue y Descargue para trabajar en ${INFO_VACANTE.ciudad}. El lugar de trabajo es en el sector del ${INFO_VACANTE.sector}.
 
 *Características del Puesto:*
-- Horario flexible: la jornada se adapta a la operación diaria, pudiendo iniciar entre las 6:00 a. m. y las 10:00 a. m. y terminar según la operación.
-- Los pagos se realizan los días 5 y 20 de cada mes.
+- Turnos rotativos de lunes a domingo, con un día compensatorio. Se requiere disponibilidad para turnos rotativos.
+- Pago quincenal.
 - Salario: SMMLV.
-- Horarios rotativos diurnos, de lunes a domingo, con un día compensatorio.
 - Contrato por obra labor directamente con la empresa.
 - Prestaciones de ley.
-- Debe contar con medio de transporte: moto o bicicleta.`;
+- Requisitos: Ser mayor de edad (18 años) y menor de 50 años. Contar con documento de identidad vigente. Si es extranjero, debe tener PPT vigente. Contar con medio de transporte propio (moto o bicicleta).`;
 
 // ─────────────────────────────────────────────────────────
 // Mensajes del bot
@@ -143,6 +142,11 @@ function detectFAQ(text) {
     return `${INFO_VACANTE.transporte}\n\n¿Te gustaría postularte?`;
   }
 
+  // Extranjeros / PPT
+  if (/soy\s+(venezolan[oa]|extranjero|extranjera)|necesito\s+papeles|documentos?\s+(si|s[ií])\s+soy\s+extranjero|ppt|permiso\s+(por|de)\s+protecci[óo]n\s+temporal/.test(n)) {
+    return 'Sí, puedes aplicar. Si eres extranjero, necesitas tener el PPT (Permiso por Protección Temporal) vigente. ¿Te gustaría postularte?';
+  }
+
   // Cómo aplico (se trata como interés afirmativo en el step GREETING_SENT)
   if (/c[óo]mo (aplico|me inscribo|hago|postulo)|d[óo]nde me inscribo|quiero aplicar/.test(n)) {
     return null; // Se manejará como interés afirmativo
@@ -178,7 +182,7 @@ function parseNaturalData(text) {
 
   // 1. Detectar tipo y número de documento
   // Patrones: "CC 1234567890", "cédula 1234567890", "mi cedula es 1234567890", "TI 1234567890"
-  const docRegex = /\b(c\.?\s*c\.?|c[ée]dula|t\.?\s*i\.?|tarjeta\s+de\s+identidad|c\.?\s*e\.?|c[ée]dula\s+de\s+extranjer[íi]a|pasaporte|ppt)\s*(?:es|:|\-|#|\.|\s)\s*(\d{6,12})\b/i;
+  const docRegex = /\b(c\.?\s*c\.?|c[ée]dula|t\.?\s*i\.?|tarjeta\s+de\s+identidad|c\.?\s*e\.?|c[ée]dula\s+de\s+extranjer[íi]a|pasaporte|ppt|permiso\s+(?:por|de)\s+protecci[óo]n\s+temporal)\s*(?:es|:|\-|#|\.|\s)\s*(\d{6,12})\b/i;
   const docMatch = remaining.match(docRegex);
   if (docMatch) {
     const tipoRaw = docMatch[1].toLowerCase().replace(/\./g, '').replace(/\s+/g, '');
@@ -189,7 +193,9 @@ function parseNaturalData(text) {
       'cc': 'CC', 'cedula': 'CC', 'cédula': 'CC',
       'ti': 'TI', 'tarjetadeidentidad': 'TI',
       'ce': 'CE', 'ceduladeextranjería': 'CE', 'ceduladeextranjeria': 'CE',
-      'pasaporte': 'Pasaporte', 'ppt': 'Pasaporte'
+      'pasaporte': 'Pasaporte',
+      'ppt': 'PPT', 'permisoporproteccióntemporal': 'PPT', 'permisoporprotecciontemporal': 'PPT',
+      'permisodeproteccióntemporal': 'PPT', 'permisodeprotecciontemporal': 'PPT'
     };
     result.documentType = tipoMap[tipoRaw] || tipoRaw.toUpperCase();
     result.documentNumber = numero;
@@ -214,20 +220,24 @@ function parseNaturalData(text) {
   const edadMatch = remaining.match(edadRegex);
   if (edadMatch) {
     const edad = parseInt(edadMatch[1], 10);
-    if (edad >= 18 && edad <= 65) {
+    if (edad >= 18 && edad <= 49) {
       result.age = edad;
       remaining = remaining.replace(edadMatch[0], ' ');
+    } else if (edad >= 50) {
+      result.ageRejected = true;
     }
   }
 
   // Si no se encontró con "años", buscar "edad: 25" o "edad 25"
-  if (!result.age) {
+  if (!result.age && !result.ageRejected) {
     const edadAlt = remaining.match(/\bedad\s*[:\-]?\s*(\d{1,2})\b/i);
     if (edadAlt) {
       const edad = parseInt(edadAlt[1], 10);
-      if (edad >= 18 && edad <= 65) {
+      if (edad >= 18 && edad <= 49) {
         result.age = edad;
         remaining = remaining.replace(edadAlt[0], ' ');
+      } else if (edad >= 50) {
+        result.ageRejected = true;
       }
     }
   }
@@ -475,7 +485,17 @@ async function processText(prisma, candidate, from, text) {
 
     // Intentar detectar si el mensaje contiene datos (el candidato puede enviar datos directamente)
     const parsedData = parseNaturalData(cleanText);
-    const fieldsFound = Object.keys(parsedData).length;
+
+    // Validar edad: si el candidato tiene 50+ años, rechazar amablemente
+    if (parsedData.ageRejected) {
+      await reply(
+        prisma, candidate.id, from,
+        'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+      );
+      return;
+    }
+
+    const fieldsFound = Object.keys(parsedData).filter(k => k !== 'ageRejected').length;
     if (fieldsFound >= 2) {
       // El candidato ya está enviando datos — mover a COLLECTING_DATA y procesarlos
       await prisma.candidate.update({
@@ -515,6 +535,15 @@ async function processText(prisma, candidate, from, text) {
     // Parsear datos del mensaje
     const parsedData = parseNaturalData(cleanText);
 
+    // Validar edad: si el candidato tiene 50+ años, rechazar amablemente
+    if (parsedData.ageRejected) {
+      await reply(
+        prisma, candidate.id, from,
+        'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+      );
+      return;
+    }
+
     // Solo actualizar los campos que se detectaron y que aún faltan
     const updateData = {};
     if (parsedData.fullName && !candidate.fullName) updateData.fullName = parsedData.fullName;
@@ -533,7 +562,14 @@ async function processText(prisma, candidate, from, text) {
       else if (field === 'tipo y número de documento') updateData.documentNumber = cleanText;
       else if (field === 'edad') {
         const num = parseInt(cleanText, 10);
-        if (num >= 18 && num <= 65) updateData.age = num;
+        if (num >= 50) {
+          await reply(
+            prisma, candidate.id, from,
+            'Lamentablemente la vacante es para personas entre 18 y 49 años. Gracias por tu interés.'
+          );
+          return;
+        }
+        if (num >= 18 && num <= 49) updateData.age = num;
       }
       else if (field === 'ciudad') updateData.city = capitalizeWords(cleanText);
       else if (field === 'barrio o zona') updateData.zone = capitalizeWords(cleanText);
