@@ -117,6 +117,10 @@ async function processText(prisma, candidate, from, text, debugTrace) {
 
   debugTrace.openai_used = aiResult.used;
   debugTrace.openai_status = aiResult.status === 'error' ? 'fallback' : aiResult.status;
+  debugTrace.openai_model = aiResult.model || debugTrace.openai_model;
+  debugTrace.openai_temperature_omitted = typeof aiResult.temperature_omitted === 'boolean'
+    ? aiResult.temperature_omitted
+    : debugTrace.openai_temperature_omitted;
   if (aiResult.intent) debugTrace.openai_intent = aiResult.intent;
   debugTrace.openai_detected_fields = Object.keys(aiFields).filter((k) => mergedData[k] !== undefined);
 

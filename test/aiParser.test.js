@@ -11,18 +11,27 @@ test('parseModelJson handles fenced json', () => {
 
 test('tryOpenAIParse returns ok with parsed fields from chat completions', async (t) => {
   const previousKey = process.env.OPENAI_API_KEY;
+  const previousModel = process.env.OPENAI_MODEL;
+  const previousTemperature = process.env.OPENAI_TEMPERATURE;
   process.env.OPENAI_API_KEY = 'test-key';
+  process.env.OPENAI_MODEL = 'gpt-4.1-mini';
+  delete process.env.OPENAI_TEMPERATURE;
 
   const originalPost = axios.post;
   t.after(() => {
     axios.post = originalPost;
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.OPENAI_MODEL;
+    else process.env.OPENAI_MODEL = previousModel;
+    if (previousTemperature === undefined) delete process.env.OPENAI_TEMPERATURE;
+    else process.env.OPENAI_TEMPERATURE = previousTemperature;
   });
 
   axios.post = async (url, payload) => {
     assert.equal(url, 'https://api.openai.com/v1/chat/completions');
     assert.equal(payload.response_format.type, 'json_object');
+    assert.equal(Object.hasOwn(payload, 'temperature'), false);
     return {
       data: {
         choices: [
@@ -41,6 +50,38 @@ test('tryOpenAIParse returns ok with parsed fields from chat completions', async
   assert.equal(result.intent, 'apply_intent');
   assert.equal(result.parsedFields.fullName, 'Juan Pérez');
   assert.equal(result.parsedFields.age, 28);
+  assert.equal(result.model, 'gpt-4.1-mini');
+  assert.equal(result.temperature_omitted, true);
+});
+
+test('tryOpenAIParse includes optional temperature only when model supports it', async (t) => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousModel = process.env.OPENAI_MODEL;
+  const previousTemperature = process.env.OPENAI_TEMPERATURE;
+  process.env.OPENAI_API_KEY = 'test-key';
+  process.env.OPENAI_MODEL = 'gpt-4o-mini';
+  process.env.OPENAI_TEMPERATURE = '0.4';
+
+  const originalPost = axios.post;
+  t.after(() => {
+    axios.post = originalPost;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.OPENAI_MODEL;
+    else process.env.OPENAI_MODEL = previousModel;
+    if (previousTemperature === undefined) delete process.env.OPENAI_TEMPERATURE;
+    else process.env.OPENAI_TEMPERATURE = previousTemperature;
+  });
+
+  axios.post = async (_url, payload) => {
+    assert.equal(payload.temperature, 0.4);
+    return { data: { choices: [{ message: { content: '{"intent":"apply_intent"}' } }] } };
+  };
+
+  const result = await tryOpenAIParse('hola');
+  assert.equal(result.status, 'ok');
+  assert.equal(result.temperature_omitted, false);
+  assert.equal(result.temperature_value, 0.4);
 });
 
 test('tryOpenAIParse returns safe summarized error', async (t) => {
