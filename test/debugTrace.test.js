@@ -8,6 +8,8 @@ test('createDebugTrace starts with secure defaults', () => {
   assert.equal(trace.currentStep_before, 'MENU');
   assert.equal(trace.cv_saved, false);
   assert.ok(['disabled', 'fallback'].includes(trace.openai_status));
+  assert.equal(typeof trace.openai_model, 'string');
+  assert.equal(typeof trace.openai_temperature_omitted, 'boolean');
 });
 
 test('splitFieldDecisions persists only empty candidate fields and rejects suspicious name', () => {

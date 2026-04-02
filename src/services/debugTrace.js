@@ -9,6 +9,8 @@ export function createDebugTrace({ phone, currentStepBefore }) {
     currentStep_after: currentStepBefore || null,
     openai_used: false,
     openai_status: process.env.OPENAI_API_KEY ? 'fallback' : 'disabled',
+    openai_model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    openai_temperature_omitted: true,
     openai_intent: 'unknown',
     openai_detected_fields: [],
     persisted_fields: [],
