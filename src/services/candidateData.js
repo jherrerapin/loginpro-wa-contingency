@@ -213,6 +213,16 @@ export function normalizeCandidateFields(fields = {}) {
   if (fields.experienceTime) {
     normalized.experienceTime = normalizeExperienceTime(fields.experienceTime);
   }
+  if (normalized.experienceTime) {
+    const amountMatch = normalized.experienceTime.match(/^(\d+)/);
+    const amount = amountMatch ? Number.parseInt(amountMatch[1], 10) : null;
+    if (Number.isFinite(amount) && amount > 0) {
+      normalized.experienceInfo = 'Sí';
+    }
+  }
+  if (normalized.experienceInfo === 'No' && !normalized.experienceTime) {
+    normalized.experienceTime = '0';
+  }
   if (fields.medicalRestrictions) {
     normalized.medicalRestrictions = normalizeMedicalRestrictions(fields.medicalRestrictions);
   }

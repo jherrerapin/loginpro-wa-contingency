@@ -42,3 +42,29 @@ test('normaliza transportMode y neighborhood', () => {
   assert.equal(normalized.transportMode, 'Moto');
   assert.equal(normalized.neighborhood, 'Picalena');
 });
+
+test('normaliza experiencia negativa a No y tiempo 0', () => {
+  const parsed = parseNaturalData('no tengo experiencia');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.experienceInfo, 'No');
+  assert.equal(normalized.experienceTime, '0');
+});
+
+test('normaliza experiencia afirmativa a Sí', () => {
+  const parsed = parseNaturalData('sí tengo experiencia');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.experienceInfo, 'Sí');
+});
+
+test('normaliza tiempo válido forzando experiencia Sí', () => {
+  const parsed = parseNaturalData('6 meses de experiencia');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.experienceInfo, 'Sí');
+  assert.equal(normalized.experienceTime, '6 meses');
+});
+
+test('normaliza ausencia de restricciones médicas', () => {
+  const parsed = parseNaturalData('no tengo restricciones');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.medicalRestrictions, 'Sin restricciones médicas');
+});

@@ -3,6 +3,8 @@ import express from 'express';
 import ExcelJS from 'exceljs';
 import path from 'node:path';
 import multer from 'multer';
+import { normalizeCandidateFields } from '../services/candidateData.js';
+import { exportFilenameByScope, filterCandidatesByScope } from '../services/candidateExport.js';
 
 // Middleware de autenticación por sesión para proteger el dashboard.
 function sessionAuth(req, res, next) {
@@ -158,16 +160,8 @@ export function adminRouter(prisma) {
     const transportMode = normalizeString(req.body.transportMode);
     const status = normalizeString(req.body.status);
 
-    let experienceTime = normalizeString(req.body.experienceTime);
-    if (experienceInfo === 'No' && !experienceTime) {
-      experienceTime = '0';
-    }
-
-    let medicalRestrictions = normalizeString(req.body.medicalRestrictions);
-    const normalizedRestrictions = medicalRestrictions ? medicalRestrictions.toLowerCase() : '';
-    if (['ninguna', 'no', 'sin restricciones'].includes(normalizedRestrictions)) {
-      medicalRestrictions = 'Sin restricciones médicas';
-    }
+    const experienceTime = normalizeString(req.body.experienceTime);
+    const medicalRestrictions = normalizeString(req.body.medicalRestrictions);
 
     const rawAge = typeof req.body.age === 'string' ? req.body.age.trim() : '';
     let age = null;
@@ -176,18 +170,29 @@ export function adminRouter(prisma) {
       age = Number.isNaN(parsedAge) ? null : parsedAge;
     }
 
+    const normalizedFields = normalizeCandidateFields({
+      fullName,
+      documentType,
+      documentNumber,
+      neighborhood,
+      experienceInfo,
+      experienceTime,
+      medicalRestrictions,
+      transportMode
+    });
+
     await prisma.candidate.update({
       where: { id: req.params.id },
       data: {
-        fullName,
-        documentType,
-        documentNumber,
+        fullName: normalizedFields.fullName ?? fullName,
+        documentType: normalizedFields.documentType ?? documentType,
+        documentNumber: normalizedFields.documentNumber ?? documentNumber,
         age,
-        neighborhood,
-        experienceInfo,
-        experienceTime,
-        medicalRestrictions,
-        transportMode,
+        neighborhood: normalizedFields.neighborhood ?? neighborhood,
+        experienceInfo: normalizedFields.experienceInfo ?? experienceInfo,
+        experienceTime: normalizedFields.experienceTime ?? experienceTime,
+        medicalRestrictions: normalizedFields.medicalRestrictions ?? medicalRestrictions,
+        transportMode: normalizedFields.transportMode ?? transportMode,
         status
       }
     });
@@ -375,10 +380,12 @@ export function adminRouter(prisma) {
   });
 
   // Ruta para exportar candidatos a Excel.
-  router.get('/export', async (_req, res) => {
-    const candidates = await prisma.candidate.findMany({
+  router.get('/export', async (req, res) => {
+    const scope = normalizeString(req.query.scope) || 'all';
+    const allCandidates = await prisma.candidate.findMany({
       orderBy: { createdAt: 'desc' }
     });
+    const candidates = filterCandidatesByScope(allCandidates, scope);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Candidatos');
@@ -395,6 +402,7 @@ export function adminRouter(prisma) {
       { header: 'Tiempo de experiencia', key: 'experienceTime', width: 20 },
       { header: 'Restricciones médicas', key: 'medicalRestrictions', width: 25 },
       { header: 'Medio de transporte', key: 'transportMode', width: 20 },
+      { header: 'CV adjunto', key: 'cvAttached', width: 12 },
       { header: 'Estado', key: 'status', width: 15 },
       { header: 'WhatsApp', key: 'whatsapp', width: 15 }
     ];
@@ -415,6 +423,7 @@ export function adminRouter(prisma) {
         experienceTime: c.experienceTime || '',
         medicalRestrictions: c.medicalRestrictions || '',
         transportMode: c.transportMode || '',
+        cvAttached: c.cvData ? 'Sí' : 'No',
         status: STATUS_LABELS[c.status] || c.status,
         whatsapp: 'Escribir'
       });
@@ -431,9 +440,8 @@ export function adminRouter(prisma) {
       row.getCell('whatsapp').font = { color: { argb: 'FF0066CC' }, underline: true };
     }
 
-    const today = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="candidatos_${today}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${exportFilenameByScope(scope)}"`);
 
     await workbook.xlsx.write(res);
     res.end();
