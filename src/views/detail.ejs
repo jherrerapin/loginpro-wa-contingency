@@ -60,7 +60,7 @@
     <% if (role === 'dev') { %>
       <a href="/admin/monitor">Monitor</a>
     <% } %>
-    <a href="/admin/export">Descargar Excel</a>
+    <a href="/admin/export?scope=all">Descargar Excel</a>
     <form method="post" action="/logout" style="margin-left:auto;">
       <button type="submit" style="background:transparent;border:1px solid #ecf0f1;color:#ecf0f1;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;">Cerrar sesión</button>
     </form>
@@ -207,7 +207,7 @@
             <label for="experienceInfo">¿Tiene experiencia?</label>
             <select id="experienceInfo" name="experienceInfo">
               <option value="" <%= !candidate.experienceInfo ? 'selected' : '' %>>—</option>
-              <option value="Si" <%= candidate.experienceInfo === 'Si' ? 'selected' : '' %>>Sí</option>
+              <option value="Sí" <%= candidate.experienceInfo === 'Sí' ? 'selected' : '' %>>Sí</option>
               <option value="No" <%= candidate.experienceInfo === 'No' ? 'selected' : '' %>>No</option>
             </select>
           </div>
