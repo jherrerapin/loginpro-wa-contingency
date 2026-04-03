@@ -8,6 +8,7 @@ export function normalizeCandidateStatusForUI(status) {
 }
 
 export function isOperationallyRegistered(candidate) {
+  const uiStatus = normalizeCandidateStatusForUI(candidate.status);
   return hasValue(candidate.fullName)
     && hasValue(candidate.documentType)
     && hasValue(candidate.documentNumber)
@@ -19,7 +20,8 @@ export function isOperationallyRegistered(candidate) {
     && hasValue(candidate.medicalRestrictions)
     && hasValue(candidate.transportMode)
     && Boolean(candidate.cvData)
-    && candidate.status !== 'RECHAZADO';
+    && uiStatus !== 'RECHAZADO'
+    && uiStatus !== 'CONTACTADO';
 }
 
 export function filterCandidatesByScope(candidates, scope = 'all') {

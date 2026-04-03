@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import express from 'express';
 import { adminRouter } from '../src/routes/admin.js';
 
@@ -85,6 +86,7 @@ test('GET /admin usa status=registered por defecto y mapea legacy como registrad
   const server = await createServer([
     completeCandidate({ id: 'legacy-validando', status: 'VALIDANDO' }),
     completeCandidate({ id: 'legacy-aprobado', status: 'APROBADO' }),
+    completeCandidate({ id: 'contactado', status: 'CONTACTADO' }),
     completeCandidate({ id: 'nuevo', status: 'NUEVO', cvData: null }),
     completeCandidate({ id: 'rechazado', status: 'RECHAZADO' })
   ]);
@@ -98,9 +100,40 @@ test('GET /admin usa status=registered por defecto y mapea legacy como registrad
     assert.equal(response.status, 200);
     assert.match(html, /Mostrando 2 candidato\(s\) registrados/);
     assert.match(html, /badge-registrado">Registrado/);
+    assert.doesNotMatch(html, /contactado/i);
     assert.doesNotMatch(html, /En revisión/);
     assert.doesNotMatch(html, /Aprobado/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('GET /admin?status=contacted muestra solo candidatos contactados', async () => {
+  const server = await createServer([
+    completeCandidate({ id: 'contactado', status: 'CONTACTADO', fullName: 'Carlos Contactado' }),
+    completeCandidate({ id: 'legacy-validando', status: 'VALIDANDO', fullName: 'Val Legacy' }),
+    completeCandidate({ id: 'legacy-aprobado', status: 'APROBADO', fullName: 'Aprob Legacy' }),
+    completeCandidate({ id: 'rechazado', status: 'RECHAZADO', fullName: 'Rex Rechazado' })
+  ]);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const cookie = await loginAndGetCookie(baseUrl);
+    const response = await fetch(`${baseUrl}/admin?status=contacted`, { headers: { Cookie: cookie } });
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /Mostrando 1 candidato\(s\) contactados/);
+    assert.match(html, /Carlos Contactado/);
+    assert.doesNotMatch(html, /Val Legacy/);
+    assert.doesNotMatch(html, /Aprob Legacy/);
+    assert.doesNotMatch(html, /Rex Rechazado/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('detail.ejs ya no renderiza la tarjeta Traza AI/CV', async () => {
+  const detailTemplate = await fs.readFile(path.resolve(process.cwd(), 'src/views/detail.ejs'), 'utf8');
+  assert.doesNotMatch(detailTemplate, /Traza AI\/CV \(últimos mensajes inbound\)/);
 });

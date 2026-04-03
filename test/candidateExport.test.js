@@ -26,6 +26,7 @@ test('registered operativo exige campos completos + CV + no rechazado', () => {
   assert.equal(isOperationallyRegistered(baseCandidate), true);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, cvData: null }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'RECHAZADO' }), false);
+  assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'CONTACTADO' }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, experienceTime: '' }), false);
 });
 
@@ -40,6 +41,7 @@ test('scope registered incluye estados legacy cuando cumplen criterio operativo'
     { ...baseCandidate, id: 'reg', status: 'REGISTRADO' },
     { ...baseCandidate, id: 'legacy-validando', status: 'VALIDANDO' },
     { ...baseCandidate, id: 'legacy-aprobado', status: 'APROBADO' },
+    { ...baseCandidate, id: 'contacted', status: 'CONTACTADO' },
     { ...baseCandidate, id: 'new-incomplete', status: 'NUEVO', cvData: null },
     { ...baseCandidate, id: 'rejected', status: 'RECHAZADO' }
   ];
@@ -49,6 +51,7 @@ test('scope registered incluye estados legacy cuando cumplen criterio operativo'
     ['reg', 'legacy-validando', 'legacy-aprobado']
   );
   assert.deepEqual(filterCandidatesByScope(candidates, 'new').map((c) => c.id), ['new-incomplete']);
+  assert.deepEqual(filterCandidatesByScope(candidates, 'contacted').map((c) => c.id), ['contacted']);
   assert.deepEqual(filterCandidatesByScope(candidates, 'rejected').map((c) => c.id), ['rejected']);
 });
 
