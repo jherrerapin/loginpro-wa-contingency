@@ -5,6 +5,30 @@ const IMPLICIT_NEIGHBORHOODS = new Set([
   'picalena', 'picaleña', 'boqueron', 'boquerón', 'jordán', 'jordan', 'salado', 'gaitan', 'gaitan', 'combeima', 'modelia', 'centro', 'ciudadela', 'bolivar', 'simon'
 ]);
 
+// Palabras que NO pueden ser nombre de persona
+const NAME_BLOCKLIST = new Set([
+  // ciudades
+  'ibague', 'ibagué', 'bogota', 'bogotá', 'medellin', 'medellín', 'cali', 'barranquilla',
+  'bucaramanga', 'cartagena', 'cucuta', 'cúcuta', 'pereira', 'manizales', 'armenia',
+  'villavicencio', 'neiva', 'pasto', 'monteria', 'montería', 'sincelejo', 'valledupar',
+  'santa', 'marta', 'popayan', 'popayán', 'tunja', 'florencia', 'yopal', 'quibdo', 'quibdó',
+  'riohacha', 'leticia', 'mocoa', 'inirida', 'inírida', 'mitu', 'mitú', 'puerto', 'carreño',
+  // departamentos
+  'tolima', 'cundinamarca', 'antioquia', 'atlantico', 'atlántico', 'bolivar', 'boyaca', 'boyacá',
+  'caldas', 'caqueta', 'caquetá', 'cauca', 'cesar', 'choco', 'chocó', 'cordoba', 'córdoba',
+  'guajira', 'huila', 'magdalena', 'meta', 'nariño', 'narino', 'norte', 'santander',
+  'putumayo', 'quindio', 'quindío', 'risaralda', 'sucre', 'vaupes', 'vaupés', 'vichada',
+  // cargos
+  'auxiliar', 'cargue', 'descargue', 'descarga', 'operario', 'conductor', 'mensajero',
+  'vigilante', 'vendedor', 'asesor', 'cajero', 'almacenista', 'bodeguero', 'logistica', 'logística',
+]);
+
+function isBlocklistedNameToken(word = '') {
+  return NAME_BLOCKLIST.has(
+    word.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  );
+}
+
 function capitalizeWords(str = '') {
   return String(str || '')
     .toLowerCase()
@@ -118,6 +142,9 @@ function detectLeadingName(text = '') {
 
   const firstChunk = compact.split(/[\n,]/)[0]?.trim() || '';
   if (hasNameTokens(firstChunk)) {
+    // FIX: rechazar si algún token es ciudad conocida o cargo
+    const tokens = firstChunk.split(/\s+/);
+    if (tokens.some(isBlocklistedNameToken)) return null;
     const candidate = capitalizeWords(firstChunk);
     if (!isSuspiciousFullName(candidate)) return candidate;
   }
@@ -196,19 +223,31 @@ export function parseNaturalData(text = '') {
   if (negativeExperience) result.experienceInfo = 'No';
   else if (positiveExperience) result.experienceInfo = 'Sí';
 
+  // FIX: capturar también el patrón invertido "experiencia de N años [en cargo]"
   const experienceContextRegex = /\b(?:tengo|cuento\s+con|llevo|aproximadamente|casi)?\s*(\d+\s*(?:a[ñn]os?|mes(?:e|es)?|semana(?:s)?))\s*(?:de\s+)?experiencia\b/i;
+  const experienceInverseRegex = /\bexperiencia(?:\s+de)?\s+(?:[a-záéíóúñ\s]{1,40}\s+)?(?:con|de)\s*(?:tiempo\s+de\s*)?(\d+\s*(?:a[ñn]os?|mes(?:e|es)?|semana(?:s)?))/i;
+  const experienceSimpleInverseRegex = /\bexperiencia\s+de\s+(\d+\s*(?:a[ñn]os?|mes(?:e|es)?|semana(?:s)?))/i;
+  const experienceTimeAfterRegex = /\btiempo\s+de\s+(?:experiencia\s+de?\s*)?(\d+\s*(?:a[ñn]os?|mes(?:e|es)?|semana(?:s)?))/i;
   const positiveInlineRegex = /\b(?:s[ií]\s+tengo)\s*(\d+\s*(?:a[ñn]os?|mes(?:e|es)?|semana(?:s)?))\b/i;
-  const expTime = compact.match(experienceContextRegex)
-    || compact.match(positiveInlineRegex)
-    || remaining.match(experienceContextRegex)
-    || remaining.match(positiveInlineRegex);
+
+  const expTime =
+    compact.match(experienceContextRegex) ||
+    compact.match(positiveInlineRegex) ||
+    compact.match(experienceSimpleInverseRegex) ||
+    compact.match(experienceInverseRegex) ||
+    compact.match(experienceTimeAfterRegex) ||
+    remaining.match(experienceContextRegex) ||
+    remaining.match(experienceSimpleInverseRegex) ||
+    remaining.match(experienceTimeAfterRegex);
+
   if (expTime) {
     result.experienceTime = expTime[1];
     result.experienceInfo = 'Sí';
   }
 
   const medicalNegative = /\b(no\s+tengo\s+restricciones?(\s+m[ée]dicas?)?|sin\s+restricciones?(\s+m[ée]dicas?)?|ninguna\s+restricci[oó]n)\b/i.test(compact)
-    || /^(no|ninguna|ninguno)$/i.test(compact.trim());
+    || /^(no|ninguna|ninguno)$/i.test(compact.trim())
+    || /\bno\s+tengo\s+nada\s+(medico|médico)\b/i.test(compact);
   const medicalAffirmative = /\b(s[ií]\s+tengo\s+restricciones?\s+m[ée]dicas?|tengo\s+restricci[oó]n(?:\s+m[ée]dica)?|no\s+puedo\s+cargar|problema\s+de\s+columna|restricci[oó]n\s+en\s+la\s+espalda)\b/i.test(compact);
   const medicalMatch = compact.match(/(?:restricciones?\s+m[ée]dicas?\s*[:\-]?\s*)([^,.\n]{2,100})/i) || remaining.match(/(?:restricciones?\s+m[ée]dicas?\s*[:\-]?\s*)([^,.\n]{2,100})/i);
   if (medicalNegative) result.medicalRestrictions = 'Sin restricciones médicas';
@@ -224,8 +263,9 @@ export function parseNaturalData(text = '') {
   if (transportNegative) {
     result.transportMode = 'Sin medio de transporte';
   } else {
-    const transportMatch = compact.match(/\b(?:transporte|movilidad|me\s+muevo\s+en)?\s*[:\-]?\s*(moto|motocicleta|bicicleta|bici|carro|bus|ninguno|ninguna)\b/i)
+    const transportMatch = compact.match(/\b(?:transporte|movilidad|me\s+muevo\s+en|para\s+transportarme)?\s*[:\-]?\s*(moto|motocicleta|bicicleta|bici|carro|bus|ninguno|ninguna)\b/i)
       || compact.match(/\b(motocicleta\s+propia)\b/i)
+      || compact.match(/\b(moto|bicicleta|bici)\s+para\s+transportarme\b/i)
       || remaining.match(/\b(moto|motocicleta|bicicleta|bici|carro|bus|ninguno|ninguna)\b/i);
     if (transportMatch) result.transportMode = normalizeTransportMode(transportMatch[1]);
   }

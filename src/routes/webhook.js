@@ -11,27 +11,9 @@ import { cancelReminderOnInbound, scheduleReminderForCandidate } from '../servic
 import { detectConversationIntent, isPostCompletionAck } from '../services/conversationIntent.js';
 import { conversationUnderstanding } from '../services/conversationUnderstanding.js';
 import { shouldBlockAutomation } from '../services/botAutomationPolicy.js';
+import { detectVacancyAndCity, buildVacancyGreeting, DEFAULT_NEUTRAL_VACANCY_PROMPT } from '../services/vacancyCatalog.js';
 
 const FAQ_RESPONSE = 'En este momento estamos recolectando hojas de vida. La entrevista está prevista para el 8 de abril. Por favor mantente pendiente del llamado del equipo de reclutamiento.';
-
-const SALUDO_INICIAL = `Hola, gracias por comunicarte con LoginPro.
-Te comparto la información de la vacante disponible:
-
-*Vacante: Auxiliar de Cargue y Descargue*
-
-Estamos en búsqueda de personal para trabajar en Ibagué, en el sector aeropuerto.
-
-*Condiciones del cargo:*
-- Pago quincenal
-- Disponibilidad para turnos rotativos
-- Horas extras
-- Contrato por obra labor directamente con la empresa
-- Prestaciones de ley
-- Debe contar con medio de transporte (moto o bicicleta)
-- La entrevista está prevista para el 8 de abril
-- Debes estar pendiente del llamado para entrevista
-
-Si estás interesado en continuar, respóndeme y te solicitaré tus datos.`;
 
 const SOLICITAR_DATOS = 'Perfecto. Envíame por favor estos datos para continuar: nombre completo, tipo de documento, número de documento, edad, barrio, si tienes experiencia en el cargo y cuánto tiempo, si tienes restricciones médicas y qué medio de transporte tienes. Puedes enviarlos en un solo mensaje, como te sea más fácil.';
 const DESCARTE_MSG = 'Gracias por tu interés. En este caso no es posible continuar con tu postulación porque no cumples con uno de los requisitos definidos para esta vacante.';
@@ -86,8 +68,6 @@ function shouldRejectByRequirements(text, parsed = {}) {
       };
     }
   }
-  // TODO(city+vacancy): cuando la vacante marque transporte como excluyente, aplicar descarte explícito
-  // con parsed.transportMode === 'Sin medio de transporte'.
   return { reject: false };
 }
 function getMissingFields(candidate) {
@@ -206,6 +186,24 @@ async function rejectCandidate(prisma, candidateId, from, rejection = {}) {
   await reply(prisma, candidateId, from, DESCARTE_MSG, '', { body: DESCARTE_MSG, source: 'bot_flow' });
 }
 
+// FIX: resolver vacante desde el primer mensaje, salir de MENU aunque no
+// se detecte vacante explícita si el candidato muestra interés.
+async function resolveVacancyForCandidate(prisma, candidateId, text, from) {
+  try {
+    const detection = detectVacancyAndCity(text);
+    if (detection?.vacancyId) {
+      await prisma.candidate.update({
+        where: { id: candidateId },
+        data: { vacancyId: detection.vacancyId }
+      });
+      return { resolved: true, greeting: buildVacancyGreeting(detection.vacancyId) };
+    }
+  } catch (_e) {
+    // silencio: vacancyCatalog puede no estar disponible sin DB
+  }
+  return { resolved: false, greeting: null };
+}
+
 async function processText(prisma, candidate, from, text, debugTrace, options = {}) {
   const cleanText = normalizeText(text);
   const hasDataIntent = containsCandidateData(cleanText);
@@ -229,11 +227,21 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
       sourceByField[field] = 'local';
     }
   }
+
+  // FIX: la IA tiene prioridad real sobre campos que el parser local NO capturó
+  // (antes solo sobreescribía sin condición, ahora respeta local cuando ya existe)
   for (const [field, value] of Object.entries(aiFields)) {
-    if (value === undefined || value === null || value === '') continue;
-    mergedData[field] = value;
-    sourceByField[field] = sourceByField[field] ? 'merged' : 'openai';
+    if (value === undefined || value === null || value === '' || field === 'intent') continue;
+    if (!mergedData[field]) {
+      // campo no capturado por regex local → usar AI incondicionalmente
+      mergedData[field] = value;
+      sourceByField[field] = 'openai';
+    } else {
+      // campo ya capturado localmente → marcar como merged (local gana)
+      sourceByField[field] = 'merged';
+    }
   }
+
   const normalizedData = normalizeCandidateFields(mergedData);
 
   debugTrace.openai_used = aiResult.used;
@@ -257,10 +265,35 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
 
   if (resolvedIntent === 'faq' || isFAQ(cleanText)) return reply(prisma, candidate.id, from, FAQ_RESPONSE, cleanText, { body: FAQ_RESPONSE, source: 'bot_flow' });
   if (candidate.status === CandidateStatus.RECHAZADO) return reply(prisma, candidate.id, from, DESCARTE_MSG);
+
+  // FIX: paso MENU — detectar vacante y avanzar siempre que haya interés.
+  // Antes: solo avanzaba si detectVacancyAndCity retornaba algo → bucle si no detectaba.
+  // Ahora: intenta detectar vacante, construye saludo apropiado y avanza a GREETING_SENT
+  // sin importar si se detectó vacante o no.
   if (candidate.currentStep === ConversationStep.MENU) {
+    const vacancyResult = await resolveVacancyForCandidate(prisma, candidate.id, cleanText, from);
+    const saludo = vacancyResult.greeting || DEFAULT_NEUTRAL_VACANCY_PROMPT ||
+      `Hola, gracias por comunicarte con LoginPro.\n\nSi deseas continuar con tu postulación, respóndeme y te solicitaré tus datos.`;
+
+    // Si el texto ya tiene datos del candidato, pasar directo a COLLECTING_DATA
+    if (hasDataIntent) {
+      await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
+      const rejection = shouldRejectByRequirements(cleanText, normalizedData);
+      if (rejection.reject) return rejectCandidate(prisma, candidate.id, from, rejection);
+      const updated = await applyDecisionsAndUpdate();
+      if (shouldAskForConfirmation(updated, normalizedData)) {
+        await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.CONFIRMING_DATA } });
+        return reply(prisma, candidate.id, from, buildConfirmationSummary(updated), cleanText, { source: 'bot_flow' });
+      }
+      const missing = getMissingFields(updated);
+      return reply(prisma, candidate.id, from, `Gracias. Para continuar solo me falta: ${missing.join(', ')}`, cleanText, { source: 'bot_flow' });
+    }
+
+    // Sin datos aún: mostrar saludo y avanzar a GREETING_SENT
     await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.GREETING_SENT } });
-    return reply(prisma, candidate.id, from, SALUDO_INICIAL, cleanText, { body: SALUDO_INICIAL, source: 'bot_flow' });
+    return reply(prisma, candidate.id, from, saludo, cleanText, { body: saludo, source: 'bot_flow' });
   }
+
   if (candidate.currentStep === ConversationStep.ASK_CV && !hasDataIntent) return reply(prisma, candidate.id, from, RECORDATORIO_HV, cleanText, { body: RECORDATORIO_HV, source: 'bot_cv_request' });
   if (candidate.currentStep === ConversationStep.DONE) {
     if (resolvedIntent === 'cv_intent') return reply(prisma, candidate.id, from, MENSAJE_DONE_CV_REPEAT, cleanText, { body: MENSAJE_DONE_CV_REPEAT, source: 'bot_cv_request' });
@@ -329,7 +362,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
   }
 
   if (candidate.currentStep === ConversationStep.GREETING_SENT) {
-      if (isNegativeInterest(cleanText)) { await reply(prisma, candidate.id, from, CIERRE_NO_INTERES, cleanText, { body: CIERRE_NO_INTERES, source: 'bot_flow' }); return; }
+    if (isNegativeInterest(cleanText)) { await reply(prisma, candidate.id, from, CIERRE_NO_INTERES, cleanText, { body: CIERRE_NO_INTERES, source: 'bot_flow' }); return; }
     if (isAffirmativeInterest(cleanText) || hasDataIntent) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
       if (hasDataIntent) {
