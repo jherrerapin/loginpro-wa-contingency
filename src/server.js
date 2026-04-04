@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
+import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { webhookRouter } from './routes/webhook.js';
 import { adminRouter } from './routes/admin.js';
@@ -82,15 +83,36 @@ app.get('/login', (req, res) => {
   });
 });
 
-app.post('/login', (req, res) => {
+/**
+ * Verifica las credenciales del usuario contra las variables de entorno.
+ *
+ * Soporta dos formatos:
+ *   1. Hash bcrypt  — si la variable empieza con "$2b$" se usa bcrypt.compare()
+ *   2. Texto plano  — comparación directa (solo para desarrollo / migración gradual)
+ *
+ * Para generar un hash desde la CLI:
+ *   node -e "import('bcrypt').then(m => m.default.hash('tu_password', 12).then(console.log))"
+ *
+ * Una vez generado, reemplaza el valor de DEV_PASS o ADMIN_PASS en el .env por el hash.
+ */
+async function verifyCredential(plain, envValue) {
+  if (!envValue) return false;
+  if (envValue.startsWith('$2b$') || envValue.startsWith('$2a$')) {
+    return bcrypt.compare(plain, envValue);
+  }
+  // Fallback texto plano: permite migración gradual sin forzar cambio inmediato.
+  return plain === envValue;
+}
+
+app.post('/login', async (req, res) => {
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
 
   let role = null;
 
-  if (username === process.env.DEV_USER && password === process.env.DEV_PASS) {
+  if (username === process.env.DEV_USER && await verifyCredential(password, process.env.DEV_PASS)) {
     role = 'dev';
-  } else if (username === process.env.ADMIN_USER && password === process.env.ADMIN_PASS) {
+  } else if (username === process.env.ADMIN_USER && await verifyCredential(password, process.env.ADMIN_PASS)) {
     role = 'admin';
   }
 
