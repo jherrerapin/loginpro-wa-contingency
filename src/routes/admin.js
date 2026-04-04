@@ -2,6 +2,7 @@
 import express from 'express';
 import ExcelJS from 'exceljs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import multer from 'multer';
 import { normalizeCandidateFields } from '../services/candidateData.js';
 import { exportFilenameByScope, filterCandidatesByScope, normalizeCandidateStatusForUI } from '../services/candidateExport.js';
@@ -55,18 +56,11 @@ function formatTimeCO(value) {
  * Retorna { start, end } como objetos Date (UTC) que cubren
  * el día completo en zona Colombia para la fecha dada.
  * @param {string} dateStr  YYYY-MM-DD en hora Colombia
- *
- * Colombia es UTC-5 sin horario de verano (IANA: America/Bogota).
- *   00:00 CO = 05:00 UTC del mismo día   → startUTC
- *   23:59:59.999 CO = 04:59:59.999 UTC del día siguiente → endUTC
- *
- * NOTA: NO usar hora > 23 en Date.UTC aunque JS lo resuelva por desbordamiento;
- * es código frágil y confuso. Se usa day + 1 explícitamente.
  */
 function colombiaDayBounds(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
-  const startUTC = new Date(Date.UTC(year, month - 1, day,     5,  0,  0,   0)); // 00:00 CO = 05:00 UTC
-  const endUTC   = new Date(Date.UTC(year, month - 1, day + 1, 4, 59, 59, 999)); // 23:59:59.999 CO = 04:59:59.999 UTC día+1
+  const startUTC = new Date(Date.UTC(year, month - 1, day,     5,  0,  0,   0));
+  const endUTC   = new Date(Date.UTC(year, month - 1, day + 1, 4, 59, 59, 999));
   return { start: startUTC, end: endUTC };
 }
 
@@ -178,19 +172,10 @@ function hasPdfSignature(buffer) {
 
 /**
  * Construye la estructura de datos del dashboard por ciudad/vacante.
- *
- * Para cada vacante activa devuelve:
- *   - bookingsToday:        candidatos con entrevista agendada en la fecha dada
- *   - registeredNoBooking:  candidatos registrados/validando SIN booking activo y SIN contactar
- *                           (solo cuando schedulingEnabled = true)
- *   - cvOnlyPipeline:       candidatos registrados cuando schedulingEnabled = false (modo solo HV)
- *
- * Los candidatos sin vacancyId asignada van en `legacyCandidates`.
  */
 async function buildDashboardData(prisma, dateStr) {
   const { start, end } = colombiaDayBounds(dateStr);
 
-  // 1. Vacantes activas con sus bookings del día y sus candidatos activos
   const vacancies = await prisma.vacancy.findMany({
     where: { acceptingApplications: true },
     orderBy: [{ city: 'asc' }, { title: 'asc' }],
@@ -231,7 +216,6 @@ async function buildDashboardData(prisma, dateStr) {
     }
   });
 
-  // 2. Candidatos legacy (sin vacante asignada), solo registrados activos
   const legacyCandidates = await prisma.candidate.findMany({
     where: {
       vacancyId: null,
@@ -247,36 +231,27 @@ async function buildDashboardData(prisma, dateStr) {
     }
   });
 
-  // 3. Agrupa vacantes por ciudad y enriquece con las secciones del dashboard
   const citiesMap = new Map();
-
-  // Estados que indican que el candidato ya fue atendido y no debe aparecer
-  // en la cola de "pendientes de agendar".
   const ATTENDED_STATUSES = new Set(['RECHAZADO', 'CONTACTADO']);
 
   for (const v of vacancies) {
     const city = v.city || 'Sin ciudad';
     if (!citiesMap.has(city)) citiesMap.set(city, []);
 
-    // Candidatos con booking activo (tienen al menos un booking no cancelado)
     const bookedCandidateIds = new Set(v.candidates
       .filter(c => c.interviewBookings.length > 0)
       .map(c => c.id));
 
     const enriched = {
       ...v,
-      // Entrevistas agendadas para el día filtrado
       bookingsToday: v.interviewBookings.map(b => ({
         ...b,
         formattedTime: formatTimeCO(b.scheduledAt),
         formattedDateTime: formatDateTimeCO(b.scheduledAt)
       })),
-      // Registrados SIN booking activo y SIN estado terminal (solo cuando schedulingEnabled = true).
-      // Se excluyen RECHAZADO (ya descartados) y CONTACTADO (ya atendidos por el reclutador).
       registeredNoBooking: v.schedulingEnabled
         ? v.candidates.filter(c => !bookedCandidateIds.has(c.id) && !ATTENDED_STATUSES.has(c.status))
         : [],
-      // Candidatos en modo solo-HV (schedulingEnabled = false)
       cvOnlyPipeline: !v.schedulingEnabled
         ? v.candidates
         : []
@@ -285,10 +260,35 @@ async function buildDashboardData(prisma, dateStr) {
     citiesMap.get(city).push(enriched);
   }
 
-  // Convierte el Map a array ordenado
   const cities = Array.from(citiesMap.entries()).map(([name, vacs]) => ({ name, vacancies: vacs }));
-
   return { cities, legacyCandidates };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers para el CRUD de vacantes
+// ─────────────────────────────────────────────────────────────
+
+function parseVacancyBody(body) {
+  const str = (v) => (typeof v === 'string' ? v.trim() || null : null);
+  const int = (v) => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
+  const bool = (v) => v === 'true' || v === true || v === 'on';
+
+  return {
+    title:                str(body.title),
+    city:                 str(body.city),
+    key:                  str(body.key),
+    role:                 str(body.role),
+    description:          str(body.description),
+    requirements:         str(body.requirements),
+    conditions:           str(body.conditions),
+    operationAddress:     str(body.operationAddress),
+    minAge:               int(body.minAge),
+    maxAge:               int(body.maxAge),
+    experienceRequired:   str(body.experienceRequired) || 'INDIFFERENT',
+    isActive:             bool(body.isActive),
+    acceptingApplications: bool(body.acceptingApplications),
+    schedulingEnabled:    bool(body.schedulingEnabled),
+  };
 }
 
 // Expone el router administrativo.
@@ -303,12 +303,8 @@ export function adminRouter(prisma) {
 
   // ─────────────────────────────────────────────
   // Ruta principal: dashboard por ciudad/vacante.
-  // ?city=Ibagué  → ciudad activa (tab seleccionado)
-  // ?date=YYYY-MM-DD → día a mostrar para entrevistas (default: hoy Colombia)
-  // ?status=...   → modo legacy (tabla plana), compatible con links existentes
   // ─────────────────────────────────────────────
   router.get('/', async (req, res) => {
-    // Si viene ?status= usamos el modo legacy (tabla plana) para compatibilidad
     const requestedStatus = normalizeString(req.query.status);
     if (requestedStatus && ADMIN_STATUS_SCOPES.has(requestedStatus)) {
       const allCandidates = await prisma.candidate.findMany({
@@ -324,7 +320,6 @@ export function adminRouter(prisma) {
         activeStatusScope: requestedStatus,
         summaryLabel: STATUS_SCOPE_SUMMARY_LABELS[requestedStatus] || STATUS_SCOPE_SUMMARY_LABELS.all,
         normalizeCandidateStatusForUI,
-        // Parámetros del modo vacantes (no aplican en legacy pero EJS los espera)
         cities: [],
         legacyCandidates: [],
         activeCity: null,
@@ -333,12 +328,10 @@ export function adminRouter(prisma) {
       });
     }
 
-    // Modo normal: dashboard por ciudad/vacante
     const rawDate = normalizeString(req.query.date);
     const selectedDate = isValidDateString(rawDate) ? rawDate : todayCO();
     const { cities, legacyCandidates } = await buildDashboardData(prisma, selectedDate);
 
-    // Ciudad activa: parámetro ?city= o primera ciudad disponible
     const rawCity = normalizeString(req.query.city);
     const availableCities = cities.map(c => c.name);
     const activeCity = (rawCity && availableCities.includes(rawCity))
@@ -356,14 +349,134 @@ export function adminRouter(prisma) {
       formatTimeCO,
       role: req.userRole,
       normalizeCandidateStatusForUI,
-      // Compatibilidad legacy
       candidates: [],
       activeStatusScope: null,
       summaryLabel: ''
     });
   });
 
-  // Ruta de detalle de un candidato con historial de mensajes.
+  // ─────────────────────────────────────────────
+  // CRUD de vacantes
+  // ─────────────────────────────────────────────
+
+  /** GET /admin/vacancies — lista todas las vacantes */
+  router.get('/vacancies', async (req, res) => {
+    const vacancies = await prisma.vacancy.findMany({
+      orderBy: [{ city: 'asc' }, { title: 'asc' }]
+    });
+    const successMsg = normalizeString(req.query.success);
+    const errorMsg   = normalizeString(req.query.error);
+    res.render('vacancies', { vacancies, role: req.userRole, successMsg, errorMsg });
+  });
+
+  /** POST /admin/vacancies/create — crear nueva vacante */
+  router.post('/vacancies/create', express.urlencoded({ extended: true }), async (req, res) => {
+    const data = parseVacancyBody(req.body);
+
+    if (!data.title || !data.city || !data.key) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título, ciudad y clave son obligatorios.'));
+    }
+
+    // Verifica que la key no exista ya
+    const existing = await prisma.vacancy.findFirst({ where: { key: data.key } });
+    if (existing) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Ya existe una vacante con esa clave (' + data.key + '). Elige otra.'));
+    }
+
+    await prisma.vacancy.create({
+      data: {
+        id:        randomUUID(),
+        key:       data.key,
+        title:     data.title,
+        city:      data.city,
+        role:      data.role,
+        description:          data.description,
+        requirements:         data.requirements,
+        conditions:           data.conditions,
+        operationAddress:     data.operationAddress,
+        minAge:               data.minAge,
+        maxAge:               data.maxAge,
+        experienceRequired:   data.experienceRequired,
+        isActive:             data.isActive,
+        acceptingApplications: data.acceptingApplications,
+        schedulingEnabled:    data.schedulingEnabled,
+      }
+    });
+
+    res.redirect('/admin/vacancies?success=' + encodeURIComponent('Vacante "' + data.title + '" creada correctamente.'));
+  });
+
+  /** POST /admin/vacancies/:id/edit — actualizar vacante */
+  router.post('/vacancies/:id/edit', express.urlencoded({ extended: true }), async (req, res) => {
+    const { id } = req.params;
+    const data = parseVacancyBody(req.body);
+
+    if (!data.title || !data.city || !data.key) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título, ciudad y clave son obligatorios.'));
+    }
+
+    // Verifica que la key no la use otra vacante
+    const conflict = await prisma.vacancy.findFirst({
+      where: { key: data.key, NOT: { id } }
+    });
+    if (conflict) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('La clave "' + data.key + '" ya está en uso por otra vacante.'));
+    }
+
+    await prisma.vacancy.update({
+      where: { id },
+      data: {
+        key:       data.key,
+        title:     data.title,
+        city:      data.city,
+        role:      data.role,
+        description:          data.description,
+        requirements:         data.requirements,
+        conditions:           data.conditions,
+        operationAddress:     data.operationAddress,
+        minAge:               data.minAge,
+        maxAge:               data.maxAge,
+        experienceRequired:   data.experienceRequired,
+        isActive:             data.isActive,
+        acceptingApplications: data.acceptingApplications,
+        schedulingEnabled:    data.schedulingEnabled,
+        updatedAt:            new Date(),
+      }
+    });
+
+    res.redirect('/admin/vacancies?success=' + encodeURIComponent('Vacante actualizada correctamente.'));
+  });
+
+  /** POST /admin/vacancies/:id/toggle — activar/pausar/cerrar vacante */
+  router.post('/vacancies/:id/toggle', async (req, res) => {
+    const vacancy = await prisma.vacancy.findUnique({ where: { id: req.params.id } });
+    if (!vacancy) return res.status(404).send('Vacante no encontrada');
+
+    let newData;
+    let msg;
+
+    if (!vacancy.isActive) {
+      // Estaba inactiva → activar y abrir
+      newData = { isActive: true, acceptingApplications: true };
+      msg = 'Vacante activada y abierta correctamente.';
+    } else if (vacancy.acceptingApplications) {
+      // Activa y abierta → pausar (cerrar postulaciones sin desactivar)
+      newData = { acceptingApplications: false };
+      msg = 'Vacante pausada. Ya no recibe nuevas postulaciones.';
+    } else {
+      // Activa pero cerrada → reabrir
+      newData = { acceptingApplications: true };
+      msg = 'Vacante reabierta. Vuelve a recibir postulaciones.';
+    }
+
+    await prisma.vacancy.update({ where: { id: req.params.id }, data: { ...newData, updatedAt: new Date() } });
+    res.redirect('/admin/vacancies?success=' + encodeURIComponent(msg));
+  });
+
+  // ─────────────────────────────────────────────
+  // Candidatos
+  // ─────────────────────────────────────────────
+
   router.get('/candidates/:id', async (req, res) => {
     const includeMessages = req.userRole === 'dev';
     const candidate = await prisma.candidate.findUnique({
@@ -397,7 +510,6 @@ export function adminRouter(prisma) {
     });
   });
 
-  // Ruta para edición manual de datos del candidato desde el panel.
   router.post('/candidates/:id/edit', express.urlencoded({ extended: true }), async (req, res) => {
     const fullName = normalizeString(req.body.fullName);
     const documentType = normalizeString(req.body.documentType);
