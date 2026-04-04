@@ -1,0 +1,38 @@
+# Dependencias locales — se instalan dentro del contenedor.
+node_modules
+npm-debug.log*
+
+# Entornos — nunca incluir en la imagen.
+.env
+.env.*
+!.env.example
+
+# Control de versiones.
+.git
+.gitignore
+.gitattributes
+
+# CI/CD y configuración del repositorio.
+.github
+
+# Tests y cobertura.
+**/*.test.js
+**/*.spec.js
+coverage
+.nyc_output
+
+# Archivos de editor.
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentación (opcional en imagen de prod).
+README.md
+CHANGELOG.md
+docs
+
+# Docker mismo.
+Dockerfile
+docker-compose*.yml
+.dockerignore
