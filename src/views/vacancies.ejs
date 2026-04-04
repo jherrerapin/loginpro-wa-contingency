@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vacantes — LoginPro</title>
+  <title>Gestión de Vacantes — LoginPro</title>
   <link rel="icon" type="image/png" href="/public/favicon-loginpro.svg" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,12 +11,12 @@
       --bg: #f4f5f7; --surface: #ffffff; --surface-2: #f9fafb;
       --border: #e1e4e8; --border-soft: #eaecef;
       --text: #1a1d23; --text-muted: #6b7280; --text-faint: #9ca3af;
-      --navy: #1e2d3d; --navy-hover: #162330;
-      --teal: #0d7a6b; --teal-light: #e6f4f1; --teal-hover: #0a5f53;
-      --amber: #b45309; --amber-light: #fef3c7;
+      --navy: #1e2d3d; --teal: #0d7a6b; --teal-light: #e6f4f1; --teal-hover: #0a5f53;
       --red: #dc2626; --red-light: #fee2e2;
-      --gray-light: #f3f4f6; --green: #16a34a; --green-light: #dcfce7;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,.08); --shadow-md: 0 4px 12px rgba(0,0,0,.10);
+      --green: #16a34a; --green-light: #dcfce7;
+      --amber: #b45309; --amber-light: #fef3c7;
+      --gray-light: #f3f4f6;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
       --radius: 8px; --radius-lg: 12px;
       --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
@@ -26,148 +26,92 @@
     .navbar { background: var(--navy); padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 52px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
     .navbar a { color: #cbd5e0; text-decoration: none; font-size: 13px; font-weight: 500; padding: 4px 2px; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
     .navbar a:hover { color: #fff; border-bottom-color: rgba(255,255,255,.3); }
-    .navbar a.active { color: #fff; border-bottom-color: var(--teal); }
+    .navbar a.nav-active { color: #fff; border-bottom-color: #4fd1c5; }
     .navbar .brand img { height: 28px; display: block; }
     .navbar .spacer { flex: 1; }
-    .btn-logout { background: transparent; border: 1px solid rgba(255,255,255,.25); color: #cbd5e0 !important; padding: 5px 12px !important; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all .15s; }
+    .btn-logout { background: transparent; border: 1px solid rgba(255,255,255,.25); color: #cbd5e0 !important; padding: 5px 12px !important; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; }
     .btn-logout:hover { border-color: rgba(255,255,255,.6) !important; color: #fff !important; }
 
-    /* Layout */
-    .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 56px; }
-    .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
     .page-header h1 { font-size: 20px; font-weight: 700; color: var(--navy); }
     .page-header .sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 
-    /* Btn primary */
-    .btn-primary {
-      background: var(--teal); color: #fff; border: none; border-radius: 8px;
-      padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer;
-      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
-      transition: background .15s;
-    }
-    .btn-primary:hover { background: var(--teal-hover); }
-    .btn-secondary {
-      background: var(--surface); color: var(--navy); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600;
-      cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
-      transition: background .15s;
-    }
-    .btn-secondary:hover { background: var(--gray-light); }
-    .btn-danger {
-      background: var(--red-light); color: var(--red); border: 1px solid #fca5a5;
-      border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600;
-      cursor: pointer; transition: background .15s;
-    }
-    .btn-danger:hover { background: #fecaca; }
-
-    /* Alerts */
-    .alert {
-      padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
-      margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
-    }
+    /* Alert */
+    .alert { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; margin-bottom: 20px; }
     .alert-success { background: var(--green-light); color: var(--green); border: 1px solid #86efac; }
     .alert-error   { background: var(--red-light);   color: var(--red);   border: 1px solid #fca5a5; }
 
-    /* Vacancy card */
-    .vacancies-list { display: flex; flex-direction: column; gap: 14px; }
-    .vacancy-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;
-    }
-    .vacancy-card.inactive { opacity: .65; }
-    .vacancy-card-header {
-      padding: 14px 18px; display: flex; align-items: center; gap: 14px;
-      border-bottom: 1px solid var(--border-soft);
-    }
-    .vacancy-icon {
-      width: 40px; height: 40px; border-radius: 10px; display: flex;
-      align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
-    }
-    .vacancy-icon.active   { background: var(--teal-light); }
-    .vacancy-icon.inactive { background: var(--gray-light); }
-    .vacancy-icon.closed   { background: var(--red-light); }
-    .vacancy-info { flex: 1; min-width: 0; }
-    .vacancy-title { font-size: 15px; font-weight: 700; color: var(--navy); }
-    .vacancy-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-    .vacancy-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: all .15s; }
+    .btn-primary   { background: var(--teal);  color: #fff; }
+    .btn-primary:hover { background: var(--teal-hover); }
+    .btn-secondary { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--gray-light); color: var(--navy); }
+    .btn-danger    { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
 
-    /* Badge */
-    .badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700;
-      white-space: nowrap;
-    }
-    .badge-active   { background: var(--green-light); color: var(--green); }
-    .badge-inactive { background: var(--gray-light);  color: var(--text-muted); }
-    .badge-closed   { background: var(--red-light);   color: var(--red); }
-    .badge-cv-only  { background: var(--amber-light); color: var(--amber); }
-    .badge-scheduling { background: var(--teal-light); color: var(--teal); }
+    /* Table */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    tbody td { padding: 12px 14px; border-bottom: 1px solid var(--border-soft); font-size: 13px; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #fafbfc; }
 
-    /* Vacancy details grid */
-    .vacancy-details {
-      padding: 14px 18px; display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px 24px;
-    }
-    .detail-item .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); margin-bottom: 3px; }
-    .detail-item .value { font-size: 13px; color: var(--text); }
-    .detail-item .value.empty { color: var(--text-faint); font-style: italic; }
+    /* Badges */
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge-open   { background: var(--green-light); color: var(--green); }
+    .badge-paused { background: var(--amber-light); color: var(--amber); }
+    .badge-closed { background: var(--red-light);   color: var(--red); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .dot-green { background: var(--green); }
+    .dot-amber { background: var(--amber); }
+    .dot-red   { background: var(--red); }
 
-    /* Empty state */
-    .empty-state {
-      text-align: center; padding: 48px 20px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); color: var(--text-muted);
-    }
-    .empty-state .empty-icon { font-size: 36px; margin-bottom: 10px; }
-    .empty-state h3 { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
-    .empty-state p  { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
-
-    /* Modal overlay */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0; z-index: 200;
-      background: rgba(0,0,0,.45); align-items: flex-start; justify-content: center;
-      padding: 40px 16px; overflow-y: auto;
-    }
+    /* Modal */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
     .modal-overlay.open { display: flex; }
-    .modal {
-      background: var(--surface); border-radius: var(--radius-lg);
-      box-shadow: 0 20px 60px rgba(0,0,0,.25); width: 100%; max-width: 580px;
-      padding: 28px; position: relative;
-    }
-    .modal-title { font-size: 17px; font-weight: 700; color: var(--navy); margin-bottom: 20px; }
-    .modal-close {
-      position: absolute; top: 16px; right: 16px; background: var(--gray-light);
-      border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer;
-      font-size: 16px; display: flex; align-items: center; justify-content: center;
-      color: var(--text-muted); transition: background .15s;
-    }
-    .modal-close:hover { background: var(--border); }
+    .modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 680px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .modal-header { padding: 18px 24px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-header h2 { font-size: 16px; font-weight: 700; color: var(--navy); }
+    .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); line-height: 1; padding: 4px; border-radius: 4px; }
+    .modal-close:hover { color: var(--text); background: var(--gray-light); }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
 
     /* Form */
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+    .form-grid .full { grid-column: 1 / -1; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group.span-2 { grid-column: span 2; }
     .form-group label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
     .form-group input, .form-group select, .form-group textarea {
-      border: 1px solid var(--border); border-radius: 7px; padding: 8px 11px;
+      border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
       font-size: 13px; font-family: var(--font); color: var(--text);
       background: var(--surface-2); outline: none; transition: border-color .15s, box-shadow .15s;
     }
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
       border-color: var(--teal); box-shadow: 0 0 0 3px rgba(13,122,107,.12);
     }
-    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group textarea { resize: vertical; min-height: 70px; }
     .form-hint { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
-    .checkbox-row { display: flex; align-items: center; gap: 10px; }
-    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal); cursor: pointer; }
-    .checkbox-row label { font-size: 13px; color: var(--text); cursor: pointer; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 13px; font-weight: 600; color: var(--text); }
+    .toggle-desc  { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .toggle-row input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--teal); }
+    .section-divider { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-soft); grid-column: 1 / -1; }
 
-    @media (max-width: 600px) {
+    /* Empty */
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--text-faint); }
+    .empty-state .empty-icon { font-size: 36px; margin-bottom: 10px; }
+    .empty-state p { font-size: 14px; }
+
+    @media (max-width: 640px) {
       .form-grid { grid-template-columns: 1fr; }
-      .form-group.span-2 { grid-column: span 1; }
-      .vacancy-card-header { flex-direction: column; align-items: flex-start; }
+      .form-grid .full { grid-column: 1; }
+      tbody td:nth-child(3), thead th:nth-child(3) { display: none; }
     }
   </style>
 </head>
@@ -178,7 +122,7 @@
     <img src="/public/logo-loginpro.svg" alt="LoginPro" />
   </a>
   <a href="/admin">Panel</a>
-  <a href="/admin/vacancies" class="active">Vacantes</a>
+  <a href="/admin/vacancies" class="nav-active">Vacantes</a>
   <% if (role === 'dev') { %>
     <a href="/admin/monitor">Monitor</a>
   <% } %>
@@ -195,7 +139,7 @@
       <h1>Gestión de Vacantes</h1>
       <p class="sub"><%= vacancies.length %> vacante<%= vacancies.length !== 1 ? 's' : '' %> registrada<%= vacancies.length !== 1 ? 's' : '' %></p>
     </div>
-    <button class="btn-primary" onclick="openModal('create')" type="button">+ Nueva vacante</button>
+    <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
   </div>
 
   <% if (successMsg) { %>
@@ -205,312 +149,315 @@
     <div class="alert alert-error">⚠️ <%= errorMsg %></div>
   <% } %>
 
-  <!-- Lista de vacantes -->
   <% if (vacancies.length === 0) { %>
-    <div class="empty-state">
-      <div class="empty-icon">📋</div>
-      <h3>No hay vacantes registradas</h3>
-      <p>Crea la primera vacante para que el bot empiece a recibir postulaciones.</p>
-      <button class="btn-primary" onclick="openModal('create')" type="button">+ Crear primera vacante</button>
+    <div class="card">
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>No hay vacantes registradas todavía.</p>
+        <p style="margin-top:6px;font-size:13px;">Crea la primera usando el botón de arriba.</p>
+      </div>
     </div>
   <% } else { %>
-    <div class="vacancies-list">
-      <% for (const v of vacancies) { %>
-        <%
-          const isActive  = v.isActive && v.acceptingApplications;
-          const isPaused  = v.isActive && !v.acceptingApplications;
-          const isDeleted = !v.isActive;
-          let iconChar  = isDeleted ? '🔴' : (v.schedulingEnabled ? '🗓️' : '📋');
-          let iconClass = isDeleted ? 'closed' : (isActive ? 'active' : 'inactive');
-          let badgeLabel, badgeClass;
-          if (isDeleted)     { badgeLabel = 'Inactiva';           badgeClass = 'badge-inactive'; }
-          else if (isPaused) { badgeLabel = 'Cerrada (en pausa)'; badgeClass = 'badge-closed'; }
-          else               { badgeLabel = 'Activa';             badgeClass = 'badge-active'; }
-          let modeBadgeLabel = v.schedulingEnabled ? 'Agendando entrevistas' : 'Solo recepción HV';
-          let modeBadgeClass = v.schedulingEnabled ? 'badge-scheduling' : 'badge-cv-only';
-        %>
-        <div class="vacancy-card <%= isActive ? '' : 'inactive' %>">
-          <div class="vacancy-card-header">
-            <div class="vacancy-icon <%= iconClass %>"><%= iconChar %></div>
-            <div class="vacancy-info">
-              <div class="vacancy-title"><%= v.title || v.role || 'Sin título' %></div>
-              <div class="vacancy-sub">📍 <%= v.city || '—' %> &nbsp;·&nbsp; 🔑 <code style="font-size:11px;"><%= v.key %></code></div>
-            </div>
-            <div class="vacancy-actions">
-              <span class="badge <%= badgeClass %>"><%= badgeLabel %></span>
-              <span class="badge <%= modeBadgeClass %>"><%= modeBadgeLabel %></span>
-              <button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="openEditModal(<%= JSON.stringify(v) %>)" type="button">✏️ Editar</button>
-              <form method="post" action="/admin/vacancies/<%= v.id %>/toggle" style="margin:0;">
-                <button type="submit" class="<%= isActive || isPaused ? 'btn-danger' : 'btn-secondary' %>" style="font-size:12px;padding:6px 12px;">
-                  <%= isActive ? '⏸ Pausar' : (isPaused ? '▶️ Reabrir' : '✅ Activar') %>
-                </button>
-              </form>
-            </div>
-          </div>
-          <div class="vacancy-details">
-            <div class="detail-item">
-              <div class="label">Cargo / Rol</div>
-              <div class="value <%= !v.role ? 'empty' : '' %>"><%= v.role || 'No definido' %></div>
-            </div>
-            <div class="detail-item">
-              <div class="label">Rango de edad</div>
-              <div class="value"><%= (v.minAge || '—') %> – <%= (v.maxAge || '—') %> años</div>
-            </div>
-            <div class="detail-item">
-              <div class="label">Experiencia requerida</div>
-              <div class="value"><%= v.experienceRequired || 'INDIFFERENT' %></div>
-            </div>
-            <div class="detail-item">
-              <div class="label">Dirección operación</div>
-              <div class="value <%= !v.operationAddress ? 'empty' : '' %>"><%= v.operationAddress || 'No definida' %></div>
-            </div>
-            <div class="detail-item span-2" style="grid-column: span 2;">
-              <div class="label">Descripción</div>
-              <div class="value <%= !v.description ? 'empty' : '' %>"><%= v.description || 'Sin descripción' %></div>
-            </div>
-          </div>
-        </div>
-      <% } %>
-    </div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Vacante</th>
+          <th>Ciudad</th>
+          <th>Clave (key)</th>
+          <th>Modo</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const v of vacancies) { %>
+          <%
+            const isOpen   = v.isActive && v.acceptingApplications;
+            const isPaused = v.isActive && !v.acceptingApplications;
+            const isClosed = !v.isActive;
+            const badgeCls = isOpen ? 'badge-open' : (isPaused ? 'badge-paused' : 'badge-closed');
+            const dotCls   = isOpen ? 'dot-green' : (isPaused ? 'dot-amber' : 'dot-red');
+            const badgeTxt = isOpen ? 'Abierta' : (isPaused ? 'Pausada' : 'Inactiva');
+            const modeIcon = v.schedulingEnabled ? '🗓️' : '📋';
+            const modeTxt  = v.schedulingEnabled ? 'Agendamiento' : 'Solo HV';
+            const toggleLabel = isOpen ? 'Pausar' : (isPaused ? 'Reabrir' : 'Activar');
+            const toggleClass = isOpen ? 'btn-danger' : 'btn-secondary';
+          %>
+          <tr>
+            <td>
+              <div style="font-weight:700;color:var(--navy);"><%= v.title %></div>
+              <% if (v.role) { %><div style="font-size:11px;color:var(--text-muted);"><%= v.role %></div><% } %>
+            </td>
+            <td><%= v.city %></td>
+            <td><code style="background:var(--gray-light);padding:2px 6px;border-radius:4px;font-size:12px;"><%= v.key %></code></td>
+            <td><span style="font-size:12px;"><%= modeIcon %> <%= modeTxt %></span></td>
+            <td><span class="badge <%= badgeCls %>"><span class="dot <%= dotCls %>"></span><%= badgeTxt %></span></td>
+            <td>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="openEdit(<%= JSON.stringify(v) %>)">✏️ Editar</button>
+                <form method="post" action="/admin/vacancies/<%= v.id %>/toggle" style="display:inline;">
+                  <button type="submit" class="btn <%= toggleClass %> btn-sm"><%= toggleLabel %></button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
   <% } %>
 
 </div>
 
-<!-- ══════════════════════════════════════ -->
-<!-- Modal: Crear vacante                  -->
-<!-- ══════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-create">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-create-title">
-    <button class="modal-close" onclick="closeModal('create')" type="button" aria-label="Cerrar">×</button>
-    <h2 class="modal-title" id="modal-create-title">Nueva Vacante</h2>
+<!-- ── Modal Crear ── -->
+<div class="modal-overlay" id="modalCreate">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalCreateTitle">
+    <div class="modal-header">
+      <h2 id="modalCreateTitle">➕ Nueva vacante</h2>
+      <button class="modal-close" onclick="closeModal('modalCreate')" aria-label="Cerrar">&times;</button>
+    </div>
     <form method="post" action="/admin/vacancies/create">
-      <div class="form-grid">
+      <div class="modal-body">
+        <div class="form-grid">
 
-        <div class="form-group">
-          <label for="c-title">Título de la vacante *</label>
-          <input type="text" id="c-title" name="title" required placeholder="Ej: Auxiliar de Cargue y Descargue" />
-        </div>
-        <div class="form-group">
-          <label for="c-city">Ciudad *</label>
-          <input type="text" id="c-city" name="city" required placeholder="Ej: Ibagué" />
-        </div>
+          <div class="section-divider">Información básica</div>
 
-        <div class="form-group">
-          <label for="c-key">Clave única (key) *</label>
-          <input type="text" id="c-key" name="key" required placeholder="Ej: auxiliar-cargue-ibague" />
-          <span class="form-hint">Sin espacios ni caracteres especiales. Solo letras, números y guiones.</span>
-        </div>
-        <div class="form-group">
-          <label for="c-role">Cargo / Rol</label>
-          <input type="text" id="c-role" name="role" placeholder="Ej: Auxiliar de Bodega" />
-        </div>
-
-        <div class="form-group">
-          <label for="c-minAge">Edad mínima</label>
-          <input type="number" id="c-minAge" name="minAge" min="16" max="99" placeholder="18" />
-        </div>
-        <div class="form-group">
-          <label for="c-maxAge">Edad máxima</label>
-          <input type="number" id="c-maxAge" name="maxAge" min="16" max="99" placeholder="50" />
-        </div>
-
-        <div class="form-group">
-          <label for="c-experienceRequired">Experiencia requerida</label>
-          <select id="c-experienceRequired" name="experienceRequired">
-            <option value="INDIFFERENT">Indiferente</option>
-            <option value="REQUIRED">Requerida</option>
-            <option value="NOT_REQUIRED">No requerida</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="c-operationAddress">Dirección de operación</label>
-          <input type="text" id="c-operationAddress" name="operationAddress" placeholder="Ej: Cll 50 #30-20 Bodega 3" />
-        </div>
-
-        <div class="form-group span-2">
-          <label for="c-description">Descripción de la vacante</label>
-          <textarea id="c-description" name="description" placeholder="Describe brevemente el perfil, funciones y condiciones..."></textarea>
-        </div>
-
-        <div class="form-group span-2">
-          <label for="c-requirements">Requisitos</label>
-          <textarea id="c-requirements" name="requirements" placeholder="Ej: Mayor de edad, buena condición física..."></textarea>
-        </div>
-
-        <div class="form-group span-2">
-          <label for="c-conditions">Condiciones laborales</label>
-          <textarea id="c-conditions" name="conditions" placeholder="Ej: Contrato a término fijo, salario mínimo + prestaciones..."></textarea>
-        </div>
-
-        <div class="form-group span-2" style="display:flex;flex-direction:row;gap:24px;align-items:center;flex-wrap:wrap;">
-          <div class="checkbox-row">
-            <input type="checkbox" id="c-isActive" name="isActive" value="true" checked />
-            <label for="c-isActive">Vacante activa</label>
+          <div class="form-group">
+            <label for="c-title">Título <span style="color:var(--red)">*</span></label>
+            <input id="c-title" name="title" type="text" required placeholder="Ej: Auxiliar de Cargue — Ibagué" />
           </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="c-acceptingApplications" name="acceptingApplications" value="true" checked />
-            <label for="c-acceptingApplications">Recibiendo postulaciones</label>
+          <div class="form-group">
+            <label for="c-city">Ciudad <span style="color:var(--red)">*</span></label>
+            <input id="c-city" name="city" type="text" required placeholder="Ej: Ibagué" />
           </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="c-schedulingEnabled" name="schedulingEnabled" value="true" />
-            <label for="c-schedulingEnabled">Habilitar agendamiento de entrevistas</label>
+          <div class="form-group">
+            <label for="c-key">Clave única (key) <span style="color:var(--red)">*</span></label>
+            <input id="c-key" name="key" type="text" required placeholder="Ej: ibague-auxiliar-2025" />
+            <span class="form-hint">Identificador interno — no se muestra al candidato.</span>
           </div>
-        </div>
+          <div class="form-group">
+            <label for="c-role">Rol / Cargo</label>
+            <input id="c-role" name="role" type="text" placeholder="Ej: Auxiliar de Cargue y Descargue" />
+          </div>
+          <div class="form-group">
+            <label for="c-address">Dirección de operación</label>
+            <input id="c-address" name="operationAddress" type="text" placeholder="Ej: Carrera 5 # 10-20, Ibagué" />
+          </div>
 
+          <div class="section-divider">Edad y experiencia</div>
+
+          <div class="form-group">
+            <label for="c-minAge">Edad mínima</label>
+            <input id="c-minAge" name="minAge" type="number" min="14" max="99" placeholder="18" />
+          </div>
+          <div class="form-group">
+            <label for="c-maxAge">Edad máxima</label>
+            <input id="c-maxAge" name="maxAge" type="number" min="14" max="99" placeholder="50" />
+          </div>
+          <div class="form-group full">
+            <label for="c-exp">Experiencia requerida</label>
+            <select id="c-exp" name="experienceRequired">
+              <option value="INDIFFERENT">Indiferente</option>
+              <option value="REQUIRED">Requerida</option>
+              <option value="NOT_REQUIRED">No requerida</option>
+            </select>
+          </div>
+
+          <div class="section-divider">Textos para el bot</div>
+
+          <div class="form-group full">
+            <label for="c-desc">Descripción de la vacante</label>
+            <textarea id="c-desc" name="description" placeholder="Breve descripción para mostrar al candidato…"></textarea>
+          </div>
+          <div class="form-group full">
+            <label for="c-req">Requisitos</label>
+            <textarea id="c-req" name="requirements" placeholder="Lista de requisitos…"></textarea>
+          </div>
+          <div class="form-group full">
+            <label for="c-cond">Condiciones / beneficios</label>
+            <textarea id="c-cond" name="conditions" placeholder="Salario, horario, beneficios…"></textarea>
+          </div>
+
+          <div class="section-divider">Configuración</div>
+
+          <div class="full">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Vacante activa</div><div class="toggle-desc">Habilita la vacante en el sistema.</div></div>
+              <input type="checkbox" name="isActive" value="true" checked />
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Recibir postulaciones</div><div class="toggle-desc">Los candidatos pueden postularse vía WhatsApp.</div></div>
+              <input type="checkbox" name="acceptingApplications" value="true" checked />
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Agendamiento de entrevistas</div><div class="toggle-desc">Activa el flujo de agenda en el bot.</div></div>
+              <input type="checkbox" name="schedulingEnabled" value="true" />
+            </div>
+          </div>
+
+        </div>
       </div>
-      <div class="form-actions">
-        <button type="button" class="btn-secondary" onclick="closeModal('create')">Cancelar</button>
-        <button type="submit" class="btn-primary">Crear vacante</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalCreate')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Crear vacante</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════ -->
-<!-- Modal: Editar vacante                 -->
-<!-- ══════════════════════════════════════ -->
-<div class="modal-overlay" id="modal-edit">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
-    <button class="modal-close" onclick="closeModal('edit')" type="button" aria-label="Cerrar">×</button>
-    <h2 class="modal-title" id="modal-edit-title">Editar Vacante</h2>
-    <form method="post" id="edit-form" action="">
-      <input type="hidden" id="e-id" name="id" />
-      <div class="form-grid">
+<!-- ── Modal Editar ── -->
+<div class="modal-overlay" id="modalEdit">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalEditTitle">
+    <div class="modal-header">
+      <h2 id="modalEditTitle">✏️ Editar vacante</h2>
+      <button class="modal-close" onclick="closeModal('modalEdit')" aria-label="Cerrar">&times;</button>
+    </div>
+    <form method="post" id="editForm" action="">
+      <div class="modal-body">
+        <div class="form-grid">
 
-        <div class="form-group">
-          <label for="e-title">Título de la vacante *</label>
-          <input type="text" id="e-title" name="title" required />
-        </div>
-        <div class="form-group">
-          <label for="e-city">Ciudad *</label>
-          <input type="text" id="e-city" name="city" required />
-        </div>
+          <div class="section-divider">Información básica</div>
 
-        <div class="form-group">
-          <label for="e-key">Clave única (key) *</label>
-          <input type="text" id="e-key" name="key" required />
-        </div>
-        <div class="form-group">
-          <label for="e-role">Cargo / Rol</label>
-          <input type="text" id="e-role" name="role" />
-        </div>
-
-        <div class="form-group">
-          <label for="e-minAge">Edad mínima</label>
-          <input type="number" id="e-minAge" name="minAge" min="16" max="99" />
-        </div>
-        <div class="form-group">
-          <label for="e-maxAge">Edad máxima</label>
-          <input type="number" id="e-maxAge" name="maxAge" min="16" max="99" />
-        </div>
-
-        <div class="form-group">
-          <label for="e-experienceRequired">Experiencia requerida</label>
-          <select id="e-experienceRequired" name="experienceRequired">
-            <option value="INDIFFERENT">Indiferente</option>
-            <option value="REQUIRED">Requerida</option>
-            <option value="NOT_REQUIRED">No requerida</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="e-operationAddress">Dirección de operación</label>
-          <input type="text" id="e-operationAddress" name="operationAddress" />
-        </div>
-
-        <div class="form-group span-2">
-          <label for="e-description">Descripción de la vacante</label>
-          <textarea id="e-description" name="description"></textarea>
-        </div>
-
-        <div class="form-group span-2">
-          <label for="e-requirements">Requisitos</label>
-          <textarea id="e-requirements" name="requirements"></textarea>
-        </div>
-
-        <div class="form-group span-2">
-          <label for="e-conditions">Condiciones laborales</label>
-          <textarea id="e-conditions" name="conditions"></textarea>
-        </div>
-
-        <div class="form-group span-2" style="display:flex;flex-direction:row;gap:24px;align-items:center;flex-wrap:wrap;">
-          <div class="checkbox-row">
-            <input type="checkbox" id="e-isActive" name="isActive" value="true" />
-            <label for="e-isActive">Vacante activa</label>
+          <div class="form-group">
+            <label for="e-title">Título <span style="color:var(--red)">*</span></label>
+            <input id="e-title" name="title" type="text" required />
           </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="e-acceptingApplications" name="acceptingApplications" value="true" />
-            <label for="e-acceptingApplications">Recibiendo postulaciones</label>
+          <div class="form-group">
+            <label for="e-city">Ciudad <span style="color:var(--red)">*</span></label>
+            <input id="e-city" name="city" type="text" required />
           </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="e-schedulingEnabled" name="schedulingEnabled" value="true" />
-            <label for="e-schedulingEnabled">Habilitar agendamiento de entrevistas</label>
+          <div class="form-group">
+            <label for="e-key">Clave única (key) <span style="color:var(--red)">*</span></label>
+            <input id="e-key" name="key" type="text" required />
+            <span class="form-hint">Identificador interno — no se muestra al candidato.</span>
           </div>
-        </div>
+          <div class="form-group">
+            <label for="e-role">Rol / Cargo</label>
+            <input id="e-role" name="role" type="text" />
+          </div>
+          <div class="form-group">
+            <label for="e-address">Dirección de operación</label>
+            <input id="e-address" name="operationAddress" type="text" />
+          </div>
 
+          <div class="section-divider">Edad y experiencia</div>
+
+          <div class="form-group">
+            <label for="e-minAge">Edad mínima</label>
+            <input id="e-minAge" name="minAge" type="number" min="14" max="99" />
+          </div>
+          <div class="form-group">
+            <label for="e-maxAge">Edad máxima</label>
+            <input id="e-maxAge" name="maxAge" type="number" min="14" max="99" />
+          </div>
+          <div class="form-group full">
+            <label for="e-exp">Experiencia requerida</label>
+            <select id="e-exp" name="experienceRequired">
+              <option value="INDIFFERENT">Indiferente</option>
+              <option value="REQUIRED">Requerida</option>
+              <option value="NOT_REQUIRED">No requerida</option>
+            </select>
+          </div>
+
+          <div class="section-divider">Textos para el bot</div>
+
+          <div class="form-group full">
+            <label for="e-desc">Descripción de la vacante</label>
+            <textarea id="e-desc" name="description"></textarea>
+          </div>
+          <div class="form-group full">
+            <label for="e-req">Requisitos</label>
+            <textarea id="e-req" name="requirements"></textarea>
+          </div>
+          <div class="form-group full">
+            <label for="e-cond">Condiciones / beneficios</label>
+            <textarea id="e-cond" name="conditions"></textarea>
+          </div>
+
+          <div class="section-divider">Configuración</div>
+
+          <div class="full">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Vacante activa</div><div class="toggle-desc">Habilita la vacante en el sistema.</div></div>
+              <input type="checkbox" id="e-isActive" name="isActive" value="true" />
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Recibir postulaciones</div><div class="toggle-desc">Los candidatos pueden postularse vía WhatsApp.</div></div>
+              <input type="checkbox" id="e-accepting" name="acceptingApplications" value="true" />
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Agendamiento de entrevistas</div><div class="toggle-desc">Activa el flujo de agenda en el bot.</div></div>
+              <input type="checkbox" id="e-scheduling" name="schedulingEnabled" value="true" />
+            </div>
+          </div>
+
+        </div>
       </div>
-      <div class="form-actions">
-        <button type="button" class="btn-secondary" onclick="closeModal('edit')">Cancelar</button>
-        <button type="submit" class="btn-primary">Guardar cambios</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('modalEdit')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
-  function openModal(type) {
-    document.getElementById('modal-' + type).classList.add('open');
+  function openCreate() {
+    document.getElementById('modalCreate').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
-  function closeModal(type) {
-    document.getElementById('modal-' + type).classList.remove('open');
+
+  function openEdit(v) {
+    const f = document.getElementById('editForm');
+    f.action = '/admin/vacancies/' + v.id + '/edit';
+
+    document.getElementById('e-title').value       = v.title || '';
+    document.getElementById('e-city').value        = v.city  || '';
+    document.getElementById('e-key').value         = v.key   || '';
+    document.getElementById('e-role').value        = v.role  || '';
+    document.getElementById('e-address').value     = v.operationAddress || '';
+    document.getElementById('e-minAge').value      = v.minAge != null ? v.minAge : '';
+    document.getElementById('e-maxAge').value      = v.maxAge != null ? v.maxAge : '';
+    document.getElementById('e-exp').value         = v.experienceRequired || 'INDIFFERENT';
+    document.getElementById('e-desc').value        = v.description  || '';
+    document.getElementById('e-req').value         = v.requirements || '';
+    document.getElementById('e-cond').value        = v.conditions   || '';
+    document.getElementById('e-isActive').checked  = Boolean(v.isActive);
+    document.getElementById('e-accepting').checked = Boolean(v.acceptingApplications);
+    document.getElementById('e-scheduling').checked= Boolean(v.schedulingEnabled);
+
+    document.getElementById('modalEdit').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
     document.body.style.overflow = '';
   }
 
-  // Close modal clicking backdrop
+  // Cerrar al click en el overlay
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => {
-      if (e.target === overlay) {
-        overlay.classList.remove('open');
-        document.body.style.overflow = '';
-      }
+      if (e.target === overlay) closeModal(overlay.id);
     });
   });
 
-  // Escape key closes modals
+  // Cerrar con Escape
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      document.querySelectorAll('.modal-overlay.open').forEach(m => {
-        m.classList.remove('open');
-        document.body.style.overflow = '';
-      });
+      document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
     }
   });
 
-  function openEditModal(v) {
-    const f = document.getElementById('edit-form');
-    f.action = '/admin/vacancies/' + v.id + '/edit';
-
-    document.getElementById('e-id').value                  = v.id || '';
-    document.getElementById('e-title').value               = v.title || '';
-    document.getElementById('e-city').value                = v.city || '';
-    document.getElementById('e-key').value                 = v.key || '';
-    document.getElementById('e-role').value                = v.role || '';
-    document.getElementById('e-minAge').value              = v.minAge != null ? v.minAge : '';
-    document.getElementById('e-maxAge').value              = v.maxAge != null ? v.maxAge : '';
-    document.getElementById('e-operationAddress').value    = v.operationAddress || '';
-    document.getElementById('e-description').value         = v.description || '';
-    document.getElementById('e-requirements').value        = v.requirements || '';
-    document.getElementById('e-conditions').value          = v.conditions || '';
-    document.getElementById('e-isActive').checked          = Boolean(v.isActive);
-    document.getElementById('e-acceptingApplications').checked = Boolean(v.acceptingApplications);
-    document.getElementById('e-schedulingEnabled').checked = Boolean(v.schedulingEnabled);
-
-    const expSel = document.getElementById('e-experienceRequired');
-    expSel.value = v.experienceRequired || 'INDIFFERENT';
-
-    openModal('edit');
-  }
+  // Auto-cerrar alertas después de 5s
+  setTimeout(() => {
+    document.querySelectorAll('.alert').forEach(a => {
+      a.style.transition = 'opacity .4s';
+      a.style.opacity = '0';
+      setTimeout(() => a.remove(), 400);
+    });
+  }, 5000);
 </script>
-
 </body>
 </html>
