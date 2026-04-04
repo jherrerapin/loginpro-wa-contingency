@@ -121,7 +121,6 @@ async function dispatchInterviewReminders(prisma) {
 
   for (const interview of dueInterviews) {
     try {
-      // buildReminderMessage(candidateName, scheduledAt, address?)
       const message = buildReminderMessage(
         interview.candidate.fullName,
         interview.slot.scheduledAt,
@@ -138,6 +137,39 @@ async function dispatchInterviewReminders(prisma) {
     } catch (err) {
       console.error(`[INTERVIEW_REMINDER_ERROR] interview ${interview.id}:`, err.message);
     }
+  }
+}
+
+// ─── HELPERS PARA WEBHOOK ────────────────────────────────────────────────────
+
+/**
+ * Cancela el recordatorio de inactividad pendiente de un candidato
+ * cuando llega un mensaje inbound. Limpia lastReminderSentAt para
+ * que el cooldown se reinicie desde el nuevo mensaje.
+ */
+export async function cancelReminderOnInbound(prisma, candidateId) {
+  try {
+    await prisma.candidate.update({
+      where: { id: candidateId },
+      data: { lastReminderSentAt: null }
+    });
+  } catch (err) {
+    console.warn(`[REMINDER_CANCEL_WARN] candidateId=${candidateId}:`, err.message);
+  }
+}
+
+/**
+ * Programa (o reprograma) el recordatorio de inactividad de un candidato
+ * actualizando lastActivityAt para reiniciar la ventana de inactividad.
+ */
+export async function scheduleReminderForCandidate(prisma, candidateId) {
+  try {
+    await prisma.candidate.update({
+      where: { id: candidateId },
+      data: { lastActivityAt: new Date() }
+    });
+  } catch (err) {
+    console.warn(`[REMINDER_SCHEDULE_WARN] candidateId=${candidateId}:`, err.message);
   }
 }
 
