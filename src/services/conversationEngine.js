@@ -24,6 +24,15 @@ const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 // Helpers de contexto
 // ─────────────────────────────────────────────
 
+function normalizeMedicalRestrictionsLabel(value) {
+  if (!value) return null;
+  const v = String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/sin restricciones?|no tengo restricciones?|ninguna restriccion/.test(v)) {
+    return 'Sin restricciones médicas';
+  }
+  return value;
+}
+
 function buildCandidateContext(candidate) {
   const genderLabel = {
     MALE: 'Masculino',
@@ -31,6 +40,8 @@ function buildCandidateContext(candidate) {
     OTHER: 'Otro',
     UNKNOWN: 'No determinado aún'
   }[candidate.gender] ?? 'No determinado aún';
+
+  const medLabel = normalizeMedicalRestrictionsLabel(candidate.medicalRestrictions);
 
   const fields = [
     candidate.fullName        && `Nombre: ${candidate.fullName}`,
@@ -41,7 +52,7 @@ function buildCandidateContext(candidate) {
     candidate.neighborhood    && `Barrio: ${candidate.neighborhood}`,
     candidate.experienceInfo  && `Experiencia: ${candidate.experienceInfo}`,
     candidate.experienceTime  && `Tiempo de experiencia: ${candidate.experienceTime}`,
-    candidate.medicalRestrictions && `Restricciones médicas: ${candidate.medicalRestrictions}`,
+    medLabel                  && `Restricciones médicas: ${medLabel}`,
     candidate.transportMode   && `Transporte: ${candidate.transportMode}`
   ].filter(Boolean);
 
@@ -121,6 +132,33 @@ FLUJO NORMAL: recolecta todos los datos, solicita CV, y si schedulingEnabled ofr
 }
 
 // ─────────────────────────────────────────────
+// Instrucciones de manejo del paso CONFIRMING_DATA
+// ─────────────────────────────────────────────
+
+function buildConfirmationStepInstructions(currentStep) {
+  if (currentStep !== 'CONFIRMING_DATA') return '';
+
+  return `
+INSTRUCCIONES CRÍTICAS PARA EL PASO ACTUAL (CONFIRMING_DATA):
+Estás esperando que el candidato confirme o corrija sus datos.
+
+CASO A — El candidato confirma (dice "sí", "si", "correcto", "está bien", "si está bien", "todo bien", "listo", etc.):
+  → Interpreta CUALQUIER respuesta afirmativa como confirmación definitiva.
+  → nextStep: "ASK_CV"
+  → actions: [{ "type": "request_cv" }]
+  → reply: pide la hoja de vida de forma natural.
+  → NO vuelvas a mostrar el resumen de datos. Ya están confirmados.
+
+CASO B — El candidato corrige un dato (dice "no tengo restricción", "mi edad es 28", "me llamo...", etc.):
+  → Extrae el dato corregido en extractedFields.
+  → actions: [{ "type": "save_fields", "data": { ...campo_corregido } }, { "type": "request_confirmation" }]
+  → nextStep: "CONFIRMING_DATA"
+  → reply: muestra el resumen COMPLETO actualizado con el dato ya corregido y pregunta de nuevo si todo está correcto.
+  → IMPORTANTE: en el resumen usa el valor CORREGIDO que el candidato acaba de dar, NO el valor anterior.
+  → El campo "restricciones médicas" debe mostrar exactamente lo que el candidato dijo. Si dijo "no tengo restricción médica" → muestra "Sin restricciones médicas".`;
+}
+
+// ─────────────────────────────────────────────
 // System prompt
 // ─────────────────────────────────────────────
 
@@ -153,6 +191,7 @@ ${buildNextSlotContext(nextSlot)}
 ${buildGenderFlowInstruction(candidate, vacancy)}
 
 PASO ACTUAL DEL FLUJO: ${currentStep}
+${buildConfirmationStepInstructions(currentStep)}
 
 HISTORIAL RECIENTE:
 ${buildConversationHistory(recentMessages)}
