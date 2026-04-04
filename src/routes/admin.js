@@ -55,12 +55,18 @@ function formatTimeCO(value) {
  * Retorna { start, end } como objetos Date (UTC) que cubren
  * el día completo en zona Colombia para la fecha dada.
  * @param {string} dateStr  YYYY-MM-DD en hora Colombia
+ *
+ * Colombia es UTC-5 sin horario de verano (IANA: America/Bogota).
+ *   00:00 CO = 05:00 UTC del mismo día   → startUTC
+ *   23:59:59.999 CO = 04:59:59.999 UTC del día siguiente → endUTC
+ *
+ * NOTA: NO usar hora > 23 en Date.UTC aunque JS lo resuelva por desbordamiento;
+ * es código frágil y confuso. Se usa day + 1 explícitamente.
  */
 function colombiaDayBounds(dateStr) {
-  // Colombia es UTC-5 sin horario de verano.
   const [year, month, day] = dateStr.split('-').map(Number);
-  const startUTC = new Date(Date.UTC(year, month - 1, day, 5, 0, 0, 0));   // 00:00 CO = 05:00 UTC
-  const endUTC   = new Date(Date.UTC(year, month - 1, day, 28, 59, 59, 999)); // 23:59:59 CO = 04:59:59 UTC del día siguiente
+  const startUTC = new Date(Date.UTC(year, month - 1, day,     5,  0,  0,   0)); // 00:00 CO = 05:00 UTC
+  const endUTC   = new Date(Date.UTC(year, month - 1, day + 1, 4, 59, 59, 999)); // 23:59:59.999 CO = 04:59:59.999 UTC día+1
   return { start: startUTC, end: endUTC };
 }
 
@@ -174,9 +180,10 @@ function hasPdfSignature(buffer) {
  * Construye la estructura de datos del dashboard por ciudad/vacante.
  *
  * Para cada vacante activa devuelve:
- *   - bookingsToday:  candidatos con entrevista agendada en la fecha dada
- *   - registeredNoBooking: candidatos registrados/validando que NO tienen booking activo (vacante con agendamiento)
- *   - cvOnlyPipeline: candidatos registrados cuando schedulingEnabled = false (modo solo HV)
+ *   - bookingsToday:        candidatos con entrevista agendada en la fecha dada
+ *   - registeredNoBooking:  candidatos registrados/validando SIN booking activo y SIN contactar
+ *                           (solo cuando schedulingEnabled = true)
+ *   - cvOnlyPipeline:       candidatos registrados cuando schedulingEnabled = false (modo solo HV)
  *
  * Los candidatos sin vacancyId asignada van en `legacyCandidates`.
  */
@@ -243,6 +250,10 @@ async function buildDashboardData(prisma, dateStr) {
   // 3. Agrupa vacantes por ciudad y enriquece con las secciones del dashboard
   const citiesMap = new Map();
 
+  // Estados que indican que el candidato ya fue atendido y no debe aparecer
+  // en la cola de "pendientes de agendar".
+  const ATTENDED_STATUSES = new Set(['RECHAZADO', 'CONTACTADO']);
+
   for (const v of vacancies) {
     const city = v.city || 'Sin ciudad';
     if (!citiesMap.has(city)) citiesMap.set(city, []);
@@ -260,9 +271,10 @@ async function buildDashboardData(prisma, dateStr) {
         formattedTime: formatTimeCO(b.scheduledAt),
         formattedDateTime: formatDateTimeCO(b.scheduledAt)
       })),
-      // Registrados SIN booking activo (solo cuando schedulingEnabled = true)
+      // Registrados SIN booking activo y SIN estado terminal (solo cuando schedulingEnabled = true).
+      // Se excluyen RECHAZADO (ya descartados) y CONTACTADO (ya atendidos por el reclutador).
       registeredNoBooking: v.schedulingEnabled
-        ? v.candidates.filter(c => !bookedCandidateIds.has(c.id) && c.status !== 'RECHAZADO')
+        ? v.candidates.filter(c => !bookedCandidateIds.has(c.id) && !ATTENDED_STATUSES.has(c.status))
         : [],
       // Candidatos en modo solo-HV (schedulingEnabled = false)
       cvOnlyPipeline: !v.schedulingEnabled
