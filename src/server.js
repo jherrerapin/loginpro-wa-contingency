@@ -3,6 +3,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import { PrismaClient } from '@prisma/client';
 import { webhookRouter } from './routes/webhook.js';
 import { adminRouter } from './routes/admin.js';
@@ -31,9 +32,25 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Tabla de sesiones en PostgreSQL.
+// connect-pg-simple crea la tabla "session" automáticamente si no existe
+// cuando se pasa createTableIfMissing: true.
+// La conexión reutiliza la DATABASE_URL ya configurada en el entorno,
+// por lo que no requiere variables adicionales.
+const PgStore = connectPgSimple(session);
+const sessionStore = new PgStore({
+  conString: process.env.DATABASE_URL,
+  tableName: 'session',
+  createTableIfMissing: true,
+  // Limpia sesiones expiradas cada hora para no acumular basura en la tabla.
+  pruneSessionInterval: 60 * 60
+});
+
 app.use(session({
   name: sessionCookieName,
   secret: sessionSecret,
+  store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -42,7 +59,6 @@ app.use(session({
     secure: isProduction,
     maxAge: 1000 * 60 * 60 * 8
   }
-  // En producción, reemplazar MemoryStore por una store persistente (Redis, DB, etc).
 }));
 
 app.use((req, _res, next) => {
