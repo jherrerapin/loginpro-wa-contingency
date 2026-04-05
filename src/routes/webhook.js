@@ -42,6 +42,17 @@ const REQUIRED_FIELDS = [
   'medicalRestrictions',
   'transportMode'
 ];
+const FIELD_LABELS = {
+  fullName: 'el nombre completo',
+  documentType: 'el tipo de documento',
+  documentNumber: 'el número de documento',
+  age: 'la edad',
+  neighborhood: 'el barrio',
+  experienceInfo: 'la experiencia en el cargo',
+  experienceTime: 'el tiempo de experiencia',
+  medicalRestrictions: 'las restricciones médicas',
+  transportMode: 'el medio de transporte'
+};
 
 const USE_CONVERSATION_ENGINE = process.env.USE_CONVERSATION_ENGINE === 'true';
 
@@ -96,7 +107,7 @@ function isAffirmativeInterest(text) {
 }
 function isAffirmativeConfirmation(text) {
   const n = normalizeText(text).toLowerCase();
-  return /^(si|sí|correcto|esta bien|está bien|todo bien|confirmo|de acuerdo|ok|listo)\b/.test(n);
+  return /^(si|sí|correcto|esta bien|está bien|todo bien|todo correcto|confirmo|de acuerdo|ok|listo|perfecto|quedo bien|quedó bien)\b/.test(n);
 }
 function isNegativeInterest(text) { const n = normalizeText(text).toLowerCase(); return /^(no+|nop+|negativo)$|no gracias|no me interesa|no estoy interesad|no deseo|paso|ya no|prefiero no/i.test(n); }
 function normalizeComparableText(text = '') { return normalizeResolverText(text); }
@@ -130,6 +141,15 @@ function getMissingFields(candidate) {
   if (!candidate.medicalRestrictions) m.push('restricciones médicas');
   if (!candidate.transportMode) m.push('medio de transporte');
   return m;
+}
+function formatFieldList(fields = []) {
+  const labels = fields
+    .map((field) => FIELD_LABELS[field] || field)
+    .filter(Boolean);
+  if (!labels.length) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} y ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} y ${labels[labels.length - 1]}`;
 }
 function containsCandidateData(text) { return Object.keys(parseNaturalData(text)).length > 0; }
 function hasHv(candidate) { return Boolean(candidate?.cvData); }
@@ -201,6 +221,17 @@ function buildMissingFieldsReply(candidate, normalizedData = {}) {
   if (capturedCount >= 2) return `Perfecto, ya registré esos datos. Para seguir necesito: ${missing.join(', ')}.`;
   if (capturedCount === 1) return `Listo, ese dato ya quedó registrado. Ahora necesito: ${missing.join(', ')}.`;
   return `Para continuar necesito: ${missing.join(', ')}.`;
+}
+function buildUpdatedConfirmationReply(candidate, updatedFields = []) {
+  const updatedLabel = formatFieldList(updatedFields);
+  const missing = getMissingFields(candidate);
+  const intro = updatedLabel
+    ? `Listo, ya actualicé ${updatedLabel}. Así va tu registro:`
+    : 'Listo, así va tu registro:';
+  const prompt = missing.length
+    ? `Para seguir me faltan: ${missing.join(', ')}.`
+    : 'Si todo está bien, seguimos con el siguiente paso.';
+  return buildConfirmationSummary(candidate, { intro, prompt });
 }
 function buildQuestionFollowUpReply(vacancy, inboundText = '', followUpText = '') {
   const answer = buildVacancyQuestionLead(vacancy, inboundText);
@@ -309,12 +340,14 @@ async function loadVacancyContext(prisma, vacancyId) {
   });
 }
 
-function buildConfirmationSummary(candidate) {
+function buildConfirmationSummary(candidate, options = {}) {
   const documentLabel = candidate.documentType && candidate.documentNumber
     ? `${candidate.documentType} ${candidate.documentNumber}`
     : 'Pendiente';
+  const intro = options.intro || 'Perfecto, por favor confirma estos datos:';
+  const prompt = options.prompt || CONFIRMACION_PROMPT;
   return [
-    'Perfecto, por favor confirma estos datos:',
+    intro,
     `• Nombre completo: ${candidate.fullName || 'Pendiente'}`,
     `• Documento: ${documentLabel}`,
     `• Edad: ${candidate.age ? `${candidate.age} años` : 'Pendiente'}`,
@@ -323,7 +356,7 @@ function buildConfirmationSummary(candidate) {
     `• Tiempo de experiencia: ${candidate.experienceTime || 'Pendiente'}`,
     `• Restricciones médicas: ${candidate.medicalRestrictions || 'Pendiente'}`,
     `• Medio de transporte: ${candidate.transportMode || 'Pendiente'}`,
-    CONFIRMACION_PROMPT
+    prompt
   ].join('\n');
 }
 
@@ -403,7 +436,9 @@ async function buildInterviewConfirmationReply(candidate, vacancy, nextSlot) {
 }
 
 function shouldAskForConfirmation(candidate, normalizedData) {
-  if (candidate.currentStep === ConversationStep.CONFIRMING_DATA) return true;
+  if (candidate.currentStep === ConversationStep.CONFIRMING_DATA) {
+    return getMissingFields(candidate).length === 0;
+  }
   const missing = getMissingFields(candidate);
   const hasMainBlock = REQUIRED_FIELDS.every((field) => candidate[field] !== null && candidate[field] !== undefined && candidate[field] !== '');
   if (hasMainBlock) return true;
@@ -412,6 +447,44 @@ function shouldAskForConfirmation(candidate, normalizedData) {
   const correctedFields = Object.keys(normalizedData || {});
   const requiresReconfirm = correctedFields.some((field) => REQUIRED_FIELDS.includes(field));
   return requiresReconfirm && correctedFields.length >= 2 && missing.length <= 2;
+}
+
+function inferNaturalOverwriteFields(text, normalizedData = {}, current = {}, currentStep = null) {
+  const allow = new Set();
+  const normalizedText = normalizeComparableText(text);
+  const isConfirming = currentStep === ConversationStep.CONFIRMING_DATA;
+  const explicitCorrection = /\b(corrijo|correccion|corrección|quise decir|actualizo|de hecho|mejor|perd[oó]n|en realidad|más bien|mas bien)\b/i.test(text);
+  const softCorrection = isConfirming && /^(no\b|no,|ah no|mejor|en realidad|de hecho)/i.test(normalizedText);
+
+  if (explicitCorrection || softCorrection) {
+    Object.keys(normalizedData).forEach((field) => allow.add(field));
+  }
+
+  if (normalizedData.age !== undefined && /\b(edad|anos|años|tengo|soy de)\b/.test(normalizedText)) {
+    allow.add('age');
+  }
+  if (normalizedData.transportMode && /\b(transporte|medio de transporte|moto|motocicleta|bicicleta|bici|cicla|bicivleta|bivivleta|bisicleta)\b/.test(normalizedText)) {
+    allow.add('transportMode');
+  }
+  if (normalizedData.medicalRestrictions && /\b(restric|medic|salud|sin restricciones|ninguna restric)\b/.test(normalizedText)) {
+    allow.add('medicalRestrictions');
+  }
+  if (normalizedData.experienceTime && /\b(experien|mes|meses|semana|semanas|anos|años)\b/.test(normalizedText)) {
+    allow.add('experienceTime');
+  }
+  if (normalizedData.experienceInfo && /\b(experien|trabaj)\b/.test(normalizedText)) {
+    allow.add('experienceInfo');
+  }
+
+  if (
+    current?.transportMode === 'Sin medio de transporte'
+    && normalizedData.transportMode
+    && normalizedData.transportMode !== 'Sin medio de transporte'
+  ) {
+    allow.add('transportMode');
+  }
+
+  return [...allow];
 }
 
 async function buildEngineContext(prisma, candidate, inboundText = '', providedVacancy = null) {
@@ -804,16 +877,11 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
   const applyDecisionsAndUpdate = async () => {
     const current = await prisma.candidate.findUnique({ where: { id: candidate.id } });
     const explicitCorrection = /\b(corrijo|correccion|quise decir|actualizo|de hecho|mejor|perd[oó]n)\b/i.test(cleanText);
-    const allowOverwriteFields = [];
+    const allowOverwriteFields = inferNaturalOverwriteFields(cleanText, normalizedData, current, candidate.currentStep);
     if (explicitCorrection) {
-      allowOverwriteFields.push(...Object.keys(normalizedData));
-    } else if (
-      current?.transportMode === 'Sin medio de transporte'
-      && normalizedData.transportMode
-      && normalizedData.transportMode !== 'Sin medio de transporte'
-      && /\b(tengo|cuento con|si tengo|sí tengo)\s+(moto|motocicleta|bicicleta|bici)\b/i.test(cleanText)
-    ) {
-      allowOverwriteFields.push('transportMode');
+      Object.keys(normalizedData).forEach((field) => {
+        if (!allowOverwriteFields.includes(field)) allowOverwriteFields.push(field);
+      });
     }
     const decisions = splitFieldDecisions(normalizedData, current, { sourceByField, allowOverwriteFields });
     debugTrace.persisted_fields.push(...decisions.persistedFields);
@@ -826,16 +894,12 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     if (Object.keys(decisions.persistedData).length) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: decisions.persistedData });
     }
-    return prisma.candidate.findUnique({ where: { id: candidate.id } });
+    const updatedCandidate = await prisma.candidate.findUnique({ where: { id: candidate.id } });
+    return { updatedCandidate, decisions };
   };
 
   const routeAfterConfirmation = async (updatedCandidate) => {
     const missing = getMissingFields(updatedCandidate);
-
-    if (USE_CONVERSATION_ENGINE) {
-      return replyWithEngine(prisma, updatedCandidate, from, cleanText);
-    }
-
     if (missing.length) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
       const replyText = buildMissingFieldsReply(updatedCandidate, normalizedData);
@@ -855,7 +919,25 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
       return routeAfterConfirmation(updated);
     }
 
-    const updated = await applyDecisionsAndUpdate();
+    const { updatedCandidate: updated, decisions } = await applyDecisionsAndUpdate();
+    const correctedRequiredFields = decisions.persistedFields.filter((field) => REQUIRED_FIELDS.includes(field));
+    const missingAfterCorrection = getMissingFields(updated);
+
+    if (correctedRequiredFields.length) {
+      if (!missingAfterCorrection.length) {
+        return routeAfterConfirmation(updated);
+      }
+
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { currentStep: ConversationStep.COLLECTING_DATA }
+      });
+      const correctionReply = buildUpdatedConfirmationReply(updated, correctedRequiredFields);
+      const body = askedVacancyQuestion
+        ? buildQuestionFollowUpReply(currentVacancy, cleanText, correctionReply)
+        : correctionReply;
+      return reply(prisma, candidate.id, from, body, cleanText, { body, source: 'bot_flow' });
+    }
 
     if (USE_CONVERSATION_ENGINE) {
       return replyWithEngine(prisma, updated, from, cleanText);
@@ -887,7 +969,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
       if (hasDataIntent) {
         const rejection = shouldRejectByRequirements(cleanText, normalizedData);
         if (rejection.reject) return rejectCandidate(prisma, candidate.id, from, rejection);
-        const updated = await applyDecisionsAndUpdate();
+        const { updatedCandidate: updated } = await applyDecisionsAndUpdate();
 
         if (USE_CONVERSATION_ENGINE) {
           return replyWithEngine(prisma, updated, from, cleanText);
@@ -924,7 +1006,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
 
     if (Object.keys(normalizedData).length >= 1) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
-      const updated = await applyDecisionsAndUpdate();
+      const { updatedCandidate: updated } = await applyDecisionsAndUpdate();
 
       if (USE_CONVERSATION_ENGINE) {
         return replyWithEngine(prisma, updated, from, cleanText);
@@ -956,7 +1038,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
   if (candidate.currentStep === ConversationStep.COLLECTING_DATA || candidate.currentStep === ConversationStep.ASK_CV) {
     const rejection = shouldRejectByRequirements(cleanText, normalizedData);
     if (rejection.reject) return rejectCandidate(prisma, candidate.id, from, rejection);
-    const updated = await applyDecisionsAndUpdate();
+    const { updatedCandidate: updated } = await applyDecisionsAndUpdate();
 
     if (USE_CONVERSATION_ENGINE) {
       return replyWithEngine(prisma, updated, from, cleanText);

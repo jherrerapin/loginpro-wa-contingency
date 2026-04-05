@@ -116,10 +116,31 @@ function isEquivalentFieldValue(field, currentValue, nextValue) {
   return normalizeComparableValue(field, currentValue) === normalizeComparableValue(field, nextValue);
 }
 
+function isIncompleteFieldValue(field, value) {
+  const normalized = normalizeComparableValue(field, value);
+  if (!normalized) return true;
+
+  switch (field) {
+    case 'age': {
+      const age = Number.parseInt(normalized, 10);
+      return !Number.isFinite(age) || age < 14 || age > 80;
+    }
+    case 'transportMode':
+      return ['ninguno', 'ninguna', 'sin', 'transporte'].includes(normalized);
+    case 'medicalRestrictions':
+      return ['no', 'ninguna', 'ninguno', 'pendiente'].includes(normalized);
+    case 'experienceTime':
+      return normalized === '0' || normalized === 'no' || normalized.length < 3;
+    default:
+      return false;
+  }
+}
+
 function canConsolidateField(field, currentValue, nextValue) {
   const currentNormalized = normalizeComparableValue(field, currentValue);
   const nextNormalized = normalizeComparableValue(field, nextValue);
   if (!currentNormalized || !nextNormalized || currentNormalized === nextNormalized) return false;
+  if (isIncompleteFieldValue(field, currentValue)) return true;
 
   switch (field) {
     case 'fullName':
@@ -132,6 +153,16 @@ function canConsolidateField(field, currentValue, nextValue) {
         && (nextNormalized.startsWith(currentNormalized) || nextNormalized.endsWith(currentNormalized));
     case 'neighborhood':
       return currentNormalized.length < nextNormalized.length && nextNormalized.includes(currentNormalized);
+    case 'age':
+      return false;
+    case 'transportMode':
+      return currentNormalized === 'sin medio de transporte' && nextNormalized !== 'sin medio de transporte';
+    case 'medicalRestrictions':
+      return currentNormalized.length < nextNormalized.length
+        || /sin restricciones|no tengo restricciones|ninguna restriccion/.test(nextNormalized);
+    case 'experienceTime':
+      return currentNormalized.length < nextNormalized.length
+        || currentNormalized === '0';
     default:
       return false;
   }
@@ -185,6 +216,9 @@ export function splitFieldDecisions(parsedData = {}, candidate = {}, options = {
 
     decisions.persistedData[field] = value;
     decisions.persistedFields.push(field);
+    if (candidateHasValue && shouldForceOverwrite) {
+      decisions.consolidatedFields.push(field);
+    }
   }
 
   return decisions;
