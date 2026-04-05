@@ -543,8 +543,11 @@ export function adminRouter(prisma) {
       await prisma.candidate.update({ where: { id }, data: update });
       await prisma.message.create({
         data: {
-          candidateId: id, direction: MessageDirection.OUTBOUND,
-          type: MessageType.TEXT, body, rawPayload: {}
+          candidateId: id,
+          direction: MessageDirection.OUTBOUND,
+          messageType: MessageType.TEXT,
+          body,
+          rawPayload: {}
         }
       });
       res.redirect(`/admin/candidates/${id}?outboundSuccess=` + encodeURIComponent('Mensaje enviado correctamente.'));
