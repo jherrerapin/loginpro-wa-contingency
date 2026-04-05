@@ -96,21 +96,46 @@
     .form-hint { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
     .section-divider { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-soft); grid-column: 1 / -1; }
 
-    /* ── Radio mode selector ── */
-    .mode-group { display: flex; flex-direction: column; gap: 8px; }
+    /* ── Toggle switch (isActive) ── */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-radius: var(--radius);
+      border: 2px solid var(--border); background: var(--surface-2);
+      transition: border-color .15s, background .15s;
+    }
+    .toggle-row.is-active { border-color: var(--teal); background: var(--teal-light); }
+    .toggle-row-body { display: flex; flex-direction: column; gap: 2px; }
+    .toggle-row-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .toggle-row-desc  { font-size: 11px; color: var(--text-muted); }
+    .toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0; cursor: pointer;
+      background: #cbd5e0; border-radius: 24px;
+      transition: background .2s;
+    }
+    .toggle-track::before {
+      content: ''; position: absolute; width: 18px; height: 18px;
+      left: 3px; top: 3px; background: #fff; border-radius: 50%;
+      transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle-switch input:checked + .toggle-track { background: var(--teal); }
+    .toggle-switch input:checked + .toggle-track::before { transform: translateX(18px); }
+
+    /* ── Radio mode selector (flujo bot) ── */
+    .mode-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .mode-option {
       display: flex; align-items: flex-start; gap: 12px;
       padding: 12px 14px; border-radius: var(--radius);
       border: 2px solid var(--border); background: var(--surface-2);
-      cursor: pointer; transition: border-color .15s, background .15s;
+      cursor: pointer; transition: border-color .15s, background .15s, opacity .15s;
     }
-    .mode-option:hover { border-color: #a0c4be; background: #f3faf9; }
+    .mode-option:hover:not(.mode-disabled) { border-color: #a0c4be; background: #f3faf9; }
+    .mode-option.mode-disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
     .mode-option input[type=radio] { margin-top: 2px; width: 16px; height: 16px; accent-color: var(--teal); flex-shrink: 0; cursor: pointer; }
-    .mode-option input[type=radio]:checked + .mode-option-body { color: var(--navy); }
     .mode-option:has(input:checked) { border-color: var(--teal); background: var(--teal-light); }
     .mode-option-title { font-size: 13px; font-weight: 700; color: var(--text); }
     .mode-option-desc  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-    .mode-label-inactive .mode-option-title { color: var(--text-muted); }
 
     .empty-state { text-align: center; padding: 48px 24px; color: var(--text-faint); }
     .empty-state .empty-icon { font-size: 36px; margin-bottom: 10px; }
@@ -173,7 +198,7 @@
           <th>Vacante</th>
           <th>Ciudad</th>
           <th>Clave (key)</th>
-          <th>Modo</th>
+          <th>Modo bot</th>
           <th>Estado</th>
           <th>Acciones</th>
         </tr>
@@ -218,15 +243,6 @@
 
 </div>
 
-<!--
-  HELPER: deriveVacancyFields(mode) → { isActive, acceptingApplications, schedulingEnabled }
-  mode: 'inactive' | 'apply_only' | 'apply_schedule'
-
-  inactive       → isActive=false, accepting=false, scheduling=false
-  apply_only     → isActive=true,  accepting=true,  scheduling=false
-  apply_schedule → isActive=true,  accepting=true,  scheduling=true
--->
-
 <!-- ── Modal Crear ── -->
 <div class="modal-overlay" id="modalCreate">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalCreateTitle">
@@ -234,7 +250,7 @@
       <h2 id="modalCreateTitle">➕ Nueva vacante</h2>
       <button class="modal-close" onclick="closeModal('modalCreate')" aria-label="Cerrar">&times;</button>
     </div>
-    <form method="post" action="/admin/vacancies/create" id="formCreate" onsubmit="injectModeFields('formCreate','c-mode')">
+    <form method="post" action="/admin/vacancies/create" id="formCreate" onsubmit="injectConfigFields('formCreate','c-isActive','c-flow')">
       <div class="modal-body">
         <div class="form-grid">
 
@@ -296,32 +312,40 @@
             <textarea id="c-cond" name="conditions" placeholder="Salario, horario, beneficios…"></textarea>
           </div>
 
-          <div class="section-divider">Modo de operación</div>
+          <div class="section-divider">Configuración</div>
 
+          <!-- Checkbox: Vacante activa -->
           <div class="full">
-            <div class="mode-group" id="c-mode" role="radiogroup" aria-label="Modo de operación">
-
-              <label class="mode-option mode-label-inactive">
-                <input type="radio" name="_vacancyMode" value="inactive" />
-                <div class="mode-option-body">
-                  <div class="mode-option-title">🔴 Vacante inactiva</div>
-                  <div class="mode-option-desc">No aparece en el bot. Los candidatos que escriban no serán enrutados a esta vacante.</div>
-                </div>
+            <div class="toggle-row" id="c-toggle-row">
+              <div class="toggle-row-body">
+                <div class="toggle-row-title">Vacante activa</div>
+                <div class="toggle-row-desc">Habilita la vacante en el sistema. El bot enruta candidatos hacia ella.</div>
+              </div>
+              <label class="toggle-switch" aria-label="Activar vacante">
+                <input type="checkbox" id="c-isActive" onchange="syncActiveState('c-isActive','c-flow','c-toggle-row')" />
+                <span class="toggle-track"></span>
               </label>
+            </div>
+          </div>
 
-              <label class="mode-option">
-                <input type="radio" name="_vacancyMode" value="apply_only" checked />
+          <!-- Radio: flujo del bot (solo habilitado si isActive) -->
+          <div class="full">
+            <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Flujo del bot</p>
+            <div class="mode-group" id="c-flow" role="radiogroup" aria-label="Flujo del bot">
+
+              <label class="mode-option mode-disabled">
+                <input type="radio" name="c_vacancyFlow" value="apply_only" checked disabled />
                 <div class="mode-option-body">
                   <div class="mode-option-title">📋 Solo postulación</div>
-                  <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Al terminar cierra con “quedaste registrado, te contactamos”. No se agenda entrevista.</div>
+                  <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Cierra con "quedaste registrado, te contactamos". Sin entrevista.</div>
                 </div>
               </label>
 
-              <label class="mode-option">
-                <input type="radio" name="_vacancyMode" value="apply_schedule" />
+              <label class="mode-option mode-disabled">
+                <input type="radio" name="c_vacancyFlow" value="apply_schedule" disabled />
                 <div class="mode-option-body">
                   <div class="mode-option-title">🗓️ Postulación + entrevista</div>
-                  <div class="mode-option-desc">El bot recolecta datos, hoja de vida y luego ofrece y agenda la entrevista automáticamente (excepto candidatas femeninas).</div>
+                  <div class="mode-option-desc">El bot recolecta datos, hoja de vida y agenda la entrevista automáticamente (candidatas femeninas siempre siguen flujo solo postulación).</div>
                 </div>
               </label>
 
@@ -345,7 +369,7 @@
       <h2 id="modalEditTitle">✏️ Editar vacante</h2>
       <button class="modal-close" onclick="closeModal('modalEdit')" aria-label="Cerrar">&times;</button>
     </div>
-    <form method="post" id="formEdit" action="" onsubmit="injectModeFields('formEdit','e-mode')">
+    <form method="post" id="formEdit" action="" onsubmit="injectConfigFields('formEdit','e-isActive','e-flow')">
       <div class="modal-body">
         <div class="form-grid">
 
@@ -407,32 +431,40 @@
             <textarea id="e-cond" name="conditions"></textarea>
           </div>
 
-          <div class="section-divider">Modo de operación</div>
+          <div class="section-divider">Configuración</div>
 
+          <!-- Checkbox: Vacante activa -->
           <div class="full">
-            <div class="mode-group" id="e-mode" role="radiogroup" aria-label="Modo de operación">
-
-              <label class="mode-option mode-label-inactive">
-                <input type="radio" name="_vacancyMode" value="inactive" />
-                <div class="mode-option-body">
-                  <div class="mode-option-title">🔴 Vacante inactiva</div>
-                  <div class="mode-option-desc">No aparece en el bot. Los candidatos que escriban no serán enrutados a esta vacante.</div>
-                </div>
+            <div class="toggle-row" id="e-toggle-row">
+              <div class="toggle-row-body">
+                <div class="toggle-row-title">Vacante activa</div>
+                <div class="toggle-row-desc">Habilita la vacante en el sistema. El bot enruta candidatos hacia ella.</div>
+              </div>
+              <label class="toggle-switch" aria-label="Activar vacante">
+                <input type="checkbox" id="e-isActive" onchange="syncActiveState('e-isActive','e-flow','e-toggle-row')" />
+                <span class="toggle-track"></span>
               </label>
+            </div>
+          </div>
+
+          <!-- Radio: flujo del bot -->
+          <div class="full">
+            <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Flujo del bot</p>
+            <div class="mode-group" id="e-flow" role="radiogroup" aria-label="Flujo del bot">
 
               <label class="mode-option">
-                <input type="radio" name="_vacancyMode" value="apply_only" />
+                <input type="radio" name="e_vacancyFlow" value="apply_only" />
                 <div class="mode-option-body">
                   <div class="mode-option-title">📋 Solo postulación</div>
-                  <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Al terminar cierra con “quedaste registrado, te contactamos”. No se agenda entrevista.</div>
+                  <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Cierra con "quedaste registrado, te contactamos". Sin entrevista.</div>
                 </div>
               </label>
 
               <label class="mode-option">
-                <input type="radio" name="_vacancyMode" value="apply_schedule" />
+                <input type="radio" name="e_vacancyFlow" value="apply_schedule" />
                 <div class="mode-option-body">
                   <div class="mode-option-title">🗓️ Postulación + entrevista</div>
-                  <div class="mode-option-desc">El bot recolecta datos, hoja de vida y luego ofrece y agenda la entrevista automáticamente (excepto candidatas femeninas).</div>
+                  <div class="mode-option-desc">El bot recolecta datos, hoja de vida y agenda la entrevista automáticamente (candidatas femeninas siempre siguen flujo solo postulación).</div>
                 </div>
               </label>
 
@@ -450,37 +482,60 @@
 </div>
 
 <script>
-  // ── Derivación de campos desde modo ───────────────────────────────
-  // inactive       → isActive=false, accepting=false, scheduling=false
-  // apply_only     → isActive=true,  accepting=true,  scheduling=false
-  // apply_schedule → isActive=true,  accepting=true,  scheduling=true
+  // ── Sincronizar estado del checkbox con los radios ─────────────────
+  // Cuando isActive=false → radios deshabilitados + clase mode-disabled
+  // Cuando isActive=true  → radios habilitados, seleccionar el primero si ninguno está checked
+  function syncActiveState(checkboxId, flowGroupId, toggleRowId) {
+    const checkbox   = document.getElementById(checkboxId);
+    const flowGroup  = document.getElementById(flowGroupId);
+    const toggleRow  = document.getElementById(toggleRowId);
+    const isChecked  = checkbox.checked;
+    const radios     = flowGroup.querySelectorAll('input[type=radio]');
+    const labels     = flowGroup.querySelectorAll('.mode-option');
 
-  const MODE_MAP = {
-    inactive:       { isActive: false, acceptingApplications: false, schedulingEnabled: false },
-    apply_only:     { isActive: true,  acceptingApplications: true,  schedulingEnabled: false },
-    apply_schedule: { isActive: true,  acceptingApplications: true,  schedulingEnabled: true  }
-  };
+    // Toggle row highlight
+    toggleRow.classList.toggle('is-active', isChecked);
 
-  function injectModeFields(formId, radioGroupId) {
-    const form  = document.getElementById(formId);
-    const group = document.getElementById(radioGroupId);
-    const mode  = group.querySelector('input[name="_vacancyMode"]:checked')?.value || 'apply_only';
-    const fields = MODE_MAP[mode];
+    // Habilitar / deshabilitar radios
+    radios.forEach(r => r.disabled = !isChecked);
+    labels.forEach(l => l.classList.toggle('mode-disabled', !isChecked));
 
-    // Remover inyecciones previas
-    form.querySelectorAll('input[data-mode-injected]').forEach(el => el.remove());
+    // Si se activa y ningún radio está checked → seleccionar el primero
+    if (isChecked) {
+      const hasChecked = Array.from(radios).some(r => r.checked);
+      if (!hasChecked) radios[0].checked = true;
+    }
+  }
 
-    // Inyectar los 3 campos que el backend espera
+  // ── Inyectar campos que el backend espera al submit ────────────────
+  // isActive           → checkbox
+  // acceptingApplications → siempre true cuando isActive=true
+  // schedulingEnabled  → según el radio seleccionado
+  function injectConfigFields(formId, checkboxId, flowGroupId) {
+    const form      = document.getElementById(formId);
+    const checkbox  = document.getElementById(checkboxId);
+    const flowGroup = document.getElementById(flowGroupId);
+    const isActive  = checkbox.checked;
+    const flowVal   = flowGroup.querySelector('input[type=radio]:checked')?.value || 'apply_only';
+
+    const fields = {
+      isActive:               isActive,
+      acceptingApplications:  isActive,   // si está activa, siempre acepta postulaciones
+      schedulingEnabled:      isActive && flowVal === 'apply_schedule'
+    };
+
+    // Limpiar inyecciones previas
+    form.querySelectorAll('input[data-cfg-injected]').forEach(el => el.remove());
+
     Object.entries(fields).forEach(([name, value]) => {
       const input = document.createElement('input');
       input.type  = 'hidden';
       input.name  = name;
       input.value = value ? 'true' : '';
-      input.dataset.modeInjected = '1';
+      input.dataset.cfgInjected = '1';
       form.appendChild(input);
     });
 
-    // Permitir que el submit continue
     return true;
   }
 
@@ -504,10 +559,11 @@
 
   // ── Modal helpers ───────────────────────────────────────────
   function openCreate() {
-    document.getElementById('c-key').value = '';
-    // Modo por defecto: apply_only
-    const group = document.getElementById('c-mode');
-    group.querySelectorAll('input[type=radio]').forEach(r => r.checked = (r.value === 'apply_only'));
+    document.getElementById('c-key').value  = '';
+    const cb    = document.getElementById('c-isActive');
+    cb.checked  = false;
+    // Estado inicial: inactiva, radios deshabilitados
+    syncActiveState('c-isActive', 'c-flow', 'c-toggle-row');
     document.getElementById('modalCreate').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
@@ -528,13 +584,17 @@
     document.getElementById('e-req').value     = v.requirements || '';
     document.getElementById('e-cond').value    = v.conditions   || '';
 
-    // Derivar modo desde los campos actuales de la vacante
-    let mode = 'inactive';
-    if (v.isActive && v.schedulingEnabled)      mode = 'apply_schedule';
-    else if (v.isActive && v.acceptingApplications) mode = 'apply_only';
+    // Checkbox
+    const cb   = document.getElementById('e-isActive');
+    cb.checked = !!v.isActive;
 
-    const group = document.getElementById('e-mode');
-    group.querySelectorAll('input[type=radio]').forEach(r => r.checked = (r.value === mode));
+    // Radio: derivar flujo desde schedulingEnabled
+    const flow  = v.schedulingEnabled ? 'apply_schedule' : 'apply_only';
+    const group = document.getElementById('e-flow');
+    group.querySelectorAll('input[type=radio]').forEach(r => r.checked = (r.value === flow));
+
+    // Sincronizar estado de los radios con el checkbox
+    syncActiveState('e-isActive', 'e-flow', 'e-toggle-row');
 
     document.getElementById('modalEdit').classList.add('open');
     document.body.style.overflow = 'hidden';
