@@ -189,6 +189,9 @@
                 <form method="post" action="/admin/vacancies/<%= v.id %>/toggle" style="display:inline;">
                   <button type="submit" class="btn <%= toggleClass %> btn-sm"><%= toggleLabel %></button>
                 </form>
+                <form method="post" action="/admin/vacancies/<%= v.id %>/delete" style="display:inline;" onsubmit="return confirm('¿Seguro que deseas eliminar esta vacante?');">
+                  <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                </form>
               </div>
             </td>
           </tr>

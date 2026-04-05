@@ -712,6 +712,28 @@ export function adminRouter(prisma) {
     res.redirect('/admin/vacancies?success=' + encodeURIComponent('Vacante "' + data.title + '" actualizada correctamente.'));
   });
 
+  router.post('/vacancies/:id/delete', async (req, res) => {
+    const { id } = req.params;
+    const vacancy = await prisma.vacancy.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!vacancy) return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Vacante no encontrada.'));
+
+    const [candidateCount, interviewSlotCount, interviewBookingCount] = await Promise.all([
+      prisma.candidate.count({ where: { vacancyId: id } }),
+      prisma.interviewSlot.count({ where: { vacancyId: id } }),
+      prisma.interviewBooking.count({ where: { vacancyId: id } }),
+    ]);
+
+    if (candidateCount > 0 || interviewSlotCount > 0 || interviewBookingCount > 0) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('No se puede eliminar la vacante porque tiene candidatos o entrevistas relacionadas.'));
+    }
+
+    await prisma.vacancy.delete({ where: { id } });
+    res.redirect('/admin/vacancies?success=' + encodeURIComponent('Vacante eliminada correctamente.'));
+  });
+
   router.post('/vacancies/:id/toggle', async (req, res) => {
     const { id } = req.params;
     const vacancy = await prisma.vacancy.findUnique({ where: { id } });
