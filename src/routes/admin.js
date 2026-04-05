@@ -55,7 +55,6 @@ function formatTimeCO(value) {
 /**
  * Retorna { start, end } como objetos Date (UTC) que cubren
  * el día completo en zona Colombia para la fecha dada.
- * @param {string} dateStr  YYYY-MM-DD en hora Colombia
  */
 function colombiaDayBounds(dateStr) {
   const [year, month, day] = dateStr.split('-').map(Number);
@@ -64,9 +63,7 @@ function colombiaDayBounds(dateStr) {
   return { start: startUTC, end: endUTC };
 }
 
-/**
- * Retorna la fecha de hoy en Colombia como string YYYY-MM-DD.
- */
+/** Retorna la fecha de hoy en Colombia como string YYYY-MM-DD. */
 function todayCO() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
@@ -74,9 +71,7 @@ function todayCO() {
   }).format(new Date());
 }
 
-/**
- * Valida que un string sea YYYY-MM-DD.
- */
+/** Valida que un string sea YYYY-MM-DD. */
 function isValidDateString(str) {
   return typeof str === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(str);
 }
@@ -170,9 +165,7 @@ function hasPdfSignature(buffer) {
   return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
 }
 
-/**
- * Construye la estructura de datos del dashboard por ciudad/vacante.
- */
+/** Construye la estructura de datos del dashboard por ciudad/vacante. */
 async function buildDashboardData(prisma, dateStr) {
   const { start, end } = colombiaDayBounds(dateStr);
 
@@ -302,9 +295,23 @@ async function loadOperations(prisma) {
       include: { city: { select: { name: true } } }
     });
   } catch {
-    // El modelo aún no existe en esta versión del schema
     return [];
   }
+}
+
+/**
+ * Consulta los últimos 100 mensajes para el monitor en tiempo real.
+ */
+async function fetchMonitorMessages(prisma) {
+  return prisma.message.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    include: {
+      candidate: {
+        select: { phone: true, currentStep: true }
+      }
+    }
+  });
 }
 
 // Expone el router administrativo.
@@ -372,6 +379,41 @@ export function adminRouter(prisma) {
   });
 
   // ─────────────────────────────────────────────
+  // Monitor en tiempo real (solo dev)
+  // ─────────────────────────────────────────────
+
+  /** GET /admin/monitor — vista HTML del monitor */
+  router.get('/monitor', ensureDevRole, async (req, res) => {
+    try {
+      const messages = await fetchMonitorMessages(prisma);
+      res.render('monitor', { messages, formatDateTimeCO, role: req.userRole });
+    } catch (err) {
+      console.error('[monitor] Error al cargar mensajes:', err);
+      res.status(500).json({ error: 'internal_server_error' });
+    }
+  });
+
+  /** GET /admin/monitor/api — JSON para el auto-refresh cada 10s */
+  router.get('/monitor/api', ensureDevRole, async (req, res) => {
+    try {
+      const messages = await fetchMonitorMessages(prisma);
+      const payload = messages.map(m => ({
+        id:           m.id,
+        direction:    m.direction,
+        body:         m.body,
+        timestamp:    m.createdAt,
+        phone:        m.candidate?.phone || '',
+        currentStep:  m.candidate?.currentStep || '',
+        debugTrace:   m.rawPayload?.debugTrace || null
+      }));
+      res.json(payload);
+    } catch (err) {
+      console.error('[monitor/api] Error:', err);
+      res.status(500).json([]);
+    }
+  });
+
+  // ─────────────────────────────────────────────
   // CRUD de vacantes
   // ─────────────────────────────────────────────
 
@@ -396,7 +438,6 @@ export function adminRouter(prisma) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título, ciudad y clave son obligatorios.'));
     }
 
-    // Verifica que la key no exista ya
     const existing = await prisma.vacancy.findFirst({ where: { key: data.key } });
     if (existing) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Ya existe una vacante con esa clave (' + data.key + '). Elige otra.'));
@@ -434,7 +475,6 @@ export function adminRouter(prisma) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título, ciudad y clave son obligatorios.'));
     }
 
-    // Verifica que la key no la use otra vacante
     const conflict = await prisma.vacancy.findFirst({
       where: { key: data.key, NOT: { id } }
     });
@@ -475,8 +515,8 @@ export function adminRouter(prisma) {
     await prisma.vacancy.update({
       where: { id },
       data: {
-        isActive:             isCurrentlyOpen ? true  : true,
-        acceptingApplications: isCurrentlyOpen ? false : true,
+        isActive:              true,
+        acceptingApplications: !isCurrentlyOpen,
       }
     });
 
