@@ -477,7 +477,7 @@ export function adminRouter(prisma) {
   router.post('/candidates/:id/edit', express.urlencoded({ extended: true }), async (req, res) => {
     const { id } = req.params;
     const raw = req.body;
-    const data = normalizeCandidateFields({
+    const candidateCoreFields = normalizeCandidateFields({
       fullName:            normalizeString(raw.fullName),
       documentType:        normalizeString(raw.documentType),
       documentNumber:      normalizeString(raw.documentNumber),
@@ -487,10 +487,15 @@ export function adminRouter(prisma) {
       experienceTime:      normalizeString(raw.experienceTime),
       medicalRestrictions: normalizeString(raw.medicalRestrictions),
       transportMode:       normalizeString(raw.transportMode),
-      status:              normalizeString(raw.status),
-      rejectionReason:     normalizeString(raw.rejectionReason),
-      rejectionDetails:    normalizeString(raw.rejectionDetails),
     });
+    const adminStatusFields = {
+      rejectionReason:  normalizeString(raw.rejectionReason),
+      rejectionDetails: normalizeString(raw.rejectionDetails),
+    };
+    const status = normalizeString(raw.status);
+    if (status) adminStatusFields.status = status;
+
+    const data = { ...candidateCoreFields, ...adminStatusFields };
     await prisma.candidate.update({ where: { id }, data });
     res.redirect(`/admin/candidates/${id}`);
   });

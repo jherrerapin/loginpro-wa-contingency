@@ -12,27 +12,10 @@ import { detectConversationIntent, isPostCompletionAck } from '../services/conve
 import { conversationUnderstanding } from '../services/conversationUnderstanding.js';
 import { shouldBlockAutomation } from '../services/botAutomationPolicy.js';
 import { runChatEngine } from '../services/chatEngine.js';
+import { normalizeResolverText, resolveVacancyFromText } from '../services/vacancyResolver.js';
 
-const FAQ_RESPONSE = 'En este momento estamos recolectando hojas de vida. La entrevista está prevista para el 8 de abril. Por favor manténte pendiente del llamado del equipo de reclutamiento.';
-
-const SALUDO_INICIAL = `Hola, gracias por comunicarte con LoginPro.
-Te comparto la información de la vacante disponible:
-
-*Vacante: Auxiliar de Cargue y Descargue*
-
-Estamos en búsqueda de personal para trabajar en Ibagué, en el sector aeropuerto.
-
-*Condiciones del cargo:*
-- Pago quincenal
-- Disponibilidad para turnos rotativos
-- Horas extras
-- Contrato por obra labor directamente con la empresa
-- Prestaciones de ley
-- Debe contar con medio de transporte (moto o bicicleta)
-- La entrevista está prevista para el 8 de abril
-- Debes estar pendiente del llamado para entrevista
-
-Si estás interesado en continuar, respóndeme y te solicitaré tus datos.`;
+const FAQ_RESPONSE = 'Con gusto te ayudo. ¿Desde qué ciudad nos escribes y para qué vacante o cargo estás interesado?';
+const SALUDO_INICIAL = 'Hola, gracias por comunicarte con LoginPro. ¿Desde qué ciudad nos escribes y para qué vacante o cargo estás interesado?';
 
 const SOLICITAR_DATOS = 'Perfecto. Enviáme por favor estos datos para continuar: nombre completo, tipo de documento, número de documento, edad, barrio, si tienes experiencia en el cargo y cuánto tiempo, si tienes restricciones médicas y qué medio de transporte tienes. Puedes enviarlos en un solo mensaje, como te sea más fácil.';
 const DESCARTE_MSG = 'Gracias por tu interés. En este caso no es posible continuar con tu postulación porque no cumples con uno de los requisitos definidos para esta vacante.';
@@ -113,22 +96,23 @@ function isAffirmativeConfirmation(text) {
   return /^(si|sí|correcto|esta bien|está bien|todo bien|confirmo|de acuerdo|ok|listo)\b/.test(n);
 }
 function isNegativeInterest(text) { const n = normalizeText(text).toLowerCase(); return /^(no+|nop+|negativo)$|no gracias|no me interesa|no estoy interesad|no deseo|paso|ya no|prefiero no/i.test(n); }
+function normalizeComparableText(text = '') { return normalizeResolverText(text); }
+function mentionsForeigner(text = '') { return /\b(extranjero|extranjera|venezolan|no soy colombian)\b/.test(normalizeComparableText(text)); }
+function hasValidForeignDocumentMention(text = '', parsed = {}) {
+  const type = String(parsed.documentType || '').trim();
+  if (['CE', 'PPT', 'Pasaporte'].includes(type)) return true;
+  const n = normalizeComparableText(text);
+  return /\b(ppt|permiso ppt|pasaporte|cedula de extranjeria|ce)\b/.test(n);
+}
+function explicitlyLacksValidDocument(text = '') {
+  const n = normalizeComparableText(text);
+  return /no tengo documento vigente|documento vencido|sin documento vigente|sin papeles|no tengo papeles|no tengo documento valido|sin documento valido|no tengo ppt|sin ppt|no tengo pasaporte|sin pasaporte|no tengo cedula de extranjeria|sin cedula de extranjeria|no tengo ce|sin ce/.test(n);
+}
 function shouldRejectByRequirements(text, parsed = {}) {
-  const n = normalizeText(text).toLowerCase();
+  const n = normalizeComparableText(text);
   if (parsed.age && (parsed.age < 18 || parsed.age > 50)) return { reject: true, reason: 'Edad fuera del rango permitido', details: `Edad detectada: ${parsed.age}` };
-  if (/no\s+tengo\s+documento\s+vigente|documento\s+vencido|sin\s+documento\s+vigente/.test(n)) {
-    return { reject: true, reason: 'Documento no vigente', details: 'El candidato indicó no tener documento vigente.' };
-  }
-  if (/(soy\s+extranjero|soy\s+venezolan|extranjera?|no\s+soy\s+colombian)/.test(n)) {
-    const type = parsed.documentType || '';
-    if (!['CE', 'PPT', 'Pasaporte'].includes(type)) {
-      return {
-        reject: true,
-        reason: 'Extranjero sin documento válido',
-        details: 'Para candidatos extranjeros solo son válidos CE, PPT o Pasaporte.'
-      };
-    }
-  }
+  if (explicitlyLacksValidDocument(n)) return { reject: true, reason: 'Documento no vigente', details: 'El candidato indicó no tener documento vigente.' };
+  if (mentionsForeigner(text) && hasValidForeignDocumentMention(text, parsed)) return { reject: false };
   return { reject: false };
 }
 function getMissingFields(candidate) {
@@ -165,6 +149,72 @@ function buildInboundBody(message = {}) {
   return '';
 }
 function getNaturalDelayMs(inputText = '', outputText = '') { if (process.env.NODE_ENV === 'test') return 0; const l = Math.max(normalizeText(inputText).length, normalizeText(outputText).length, 1); return Math.max(1500, Math.min(2500, 1500 + Math.min(1000, Math.round(l * 8)))); }
+function isQuestionLike(text = '') {
+  const n = normalizeComparableText(text);
+  return String(text || '').includes('?') || /\b(que|cual|cuales|como|cuando|donde|cuanto|quien|requisitos|condiciones|horario|pago|direccion|ubicacion|cargo)\b/.test(n);
+}
+function buildVacancyLocation(vacancy) {
+  return [vacancy?.operation?.city?.name || vacancy?.city || null, vacancy?.operation?.name || null]
+    .filter(Boolean)
+    .join(' - ');
+}
+function buildVacancyQuestionLead(vacancy, text = '') {
+  const n = normalizeComparableText(text);
+  const location = buildVacancyLocation(vacancy);
+  if (/(donde|direccion|ubicacion|queda|sector)/.test(n)) {
+    return vacancy?.operationAddress
+      ? `Claro. La vacante está registrada para ${location || 'esa operación'} y el punto de operación es ${vacancy.operationAddress}.`
+      : `Claro. La vacante está registrada para ${location || 'esa operación'}.`;
+  }
+  if (/(requisit|document|edad|experien|perfil)/.test(n) && vacancy?.requirements) {
+    return `Claro. Los requisitos registrados para esta vacante son: ${vacancy.requirements}.`;
+  }
+  if (/(pago|salario|sueldo|turno|horario|condicion|beneficio|contrato)/.test(n) && vacancy?.conditions) {
+    return `Claro. Las condiciones registradas para esta vacante son: ${vacancy.conditions}.`;
+  }
+  if (/(funcion|cargo|labor|hacer|rol)/.test(n)) {
+    const description = vacancy?.roleDescription || vacancy?.role || vacancy?.title;
+    return `Claro. El cargo registrado es ${vacancy?.title || vacancy?.role || 'la vacante consultada'}${description ? ` y la descripción disponible es: ${description}.` : '.'}`;
+  }
+  return 'Claro. Te comparto la información real que tengo registrada para esa vacante.';
+}
+function buildVacancyContinuePrompt(candidate) {
+  if (candidate.currentStep === ConversationStep.ASK_CV) return RECORDATORIO_HV;
+  if (candidate.currentStep === ConversationStep.COLLECTING_DATA || candidate.currentStep === ConversationStep.CONFIRMING_DATA) {
+    const missing = getMissingFields(candidate);
+    if (missing.length) return `Si deseas continuar, aún me faltan estos datos: ${missing.join(', ')}.`;
+    return SOLICITAR_HV;
+  }
+  if (candidate.currentStep === ConversationStep.DONE) return MENSAJE_DONE_ACK;
+  return 'Si estás interesado en continuar, respóndeme y te solicitaré tus datos.';
+}
+function buildVacancyReply(vacancy, candidate, inboundText = '') {
+  const lines = [];
+  lines.push(isQuestionLike(inboundText) ? buildVacancyQuestionLead(vacancy, inboundText) : 'Hola, gracias por comunicarte con LoginPro.');
+  lines.push('', 'Te comparto la información de la vacante disponible:', '', `*Vacante:* ${vacancy.title || vacancy.role}`);
+  if (vacancy.role && vacancy.role !== vacancy.title) lines.push(`*Cargo:* ${vacancy.role}`);
+  const location = buildVacancyLocation(vacancy);
+  if (location) lines.push(`*Ciudad / operación:* ${location}`);
+  if (vacancy.operationAddress) lines.push(`*Dirección de operación:* ${vacancy.operationAddress}`);
+  if (vacancy.roleDescription) lines.push(`*Descripción del cargo:* ${vacancy.roleDescription}`);
+  if (vacancy.requirements) lines.push(`*Requisitos:* ${vacancy.requirements}`);
+  if (vacancy.conditions) lines.push(`*Condiciones:* ${vacancy.conditions}`);
+  lines.push('', buildVacancyContinuePrompt(candidate));
+  return lines.join('\n');
+}
+async function loadVacancyContext(prisma, vacancyId) {
+  if (!vacancyId) return null;
+  return prisma.vacancy.findUnique({
+    where: { id: vacancyId },
+    include: {
+      operation: {
+        include: {
+          city: true,
+        },
+      },
+    },
+  });
+}
 
 function buildConfirmationSummary(candidate) {
   const documentLabel = candidate.documentType && candidate.documentNumber
@@ -198,7 +248,7 @@ function shouldAskForConfirmation(candidate, normalizedData) {
 
 async function buildEngineContext(prisma, candidate) {
   const vacancy = candidate.vacancyId
-    ? await prisma.vacancy.findUnique({ where: { id: candidate.vacancyId } })
+    ? await loadVacancyContext(prisma, candidate.vacancyId)
     : null;
 
   const recentMessagesRaw = await prisma.message.findMany({
@@ -295,8 +345,8 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
   debugTrace.used_multiline_context = Boolean(options.usedMultilineContext);
   debugTrace.consolidated_input_summary = options.consolidatedInputSummary || null;
 
-  const understanding = await conversationUnderstanding(cleanText);
   const aiResult = await tryOpenAIParse(cleanText);
+  const understanding = await conversationUnderstanding(cleanText, { aiResult });
   const localParsedData = parseNaturalData(cleanText);
   const aiFields = aiResult.parsedFields || {};
   const sourceByField = {};
@@ -323,10 +373,40 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     ? aiResult.temperature_omitted
     : debugTrace.openai_temperature_omitted;
   const resolvedIntent = aiResult.intent || understanding.intent || fallbackIntent;
+  const vacancyHints = {
+    city: aiFields.city || understanding.cityDetection?.value || null,
+    roleHint: aiFields.roleHint || understanding.vacancyDetection?.value || null,
+  };
   if (resolvedIntent) debugTrace.openai_intent = resolvedIntent;
   debugTrace.openai_detected_fields = Object.keys(aiFields).filter((k) => normalizedData[k] !== undefined);
   debugTrace.source_by_field = sourceByField;
   debugTrace.normalized_fields = normalizedData;
+  debugTrace.vacancy_hint_city = vacancyHints.city;
+  debugTrace.vacancy_hint_role = vacancyHints.roleHint;
+
+  const resolveVacancyForCandidate = async () => {
+    const resolution = await resolveVacancyFromText(prisma, cleanText, {
+      cityHint: vacancyHints.city,
+      roleHint: vacancyHints.roleHint,
+    });
+    debugTrace.vacancy_resolution = {
+      resolved: resolution.resolved,
+      vacancyId: resolution.vacancy?.id || null,
+      city: resolution.city,
+      roleHint: resolution.roleHint,
+      reason: resolution.reason,
+    };
+    return resolution;
+  };
+
+  const replyWithVacancyContext = async (candidateState, vacancy = null) => {
+    const effectiveVacancy = vacancy || await loadVacancyContext(prisma, candidateState.vacancyId);
+    if (!effectiveVacancy) {
+      return reply(prisma, candidate.id, from, FAQ_RESPONSE, cleanText, { body: FAQ_RESPONSE, source: 'bot_vacancy_prompt' });
+    }
+    const body = buildVacancyReply(effectiveVacancy, candidateState, cleanText);
+    return reply(prisma, candidate.id, from, body, cleanText, { body, source: 'bot_vacancy_context' });
+  };
 
   if (aiResult.status === 'error') {
     debugTrace.error_summary = summarizeError(aiResult.error);
@@ -335,29 +415,58 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     console.log('[AI_FALLBACK]', JSON.stringify({ phone: candidate.phone, reason: 'openai_disabled' }));
   }
 
-  if (resolvedIntent === 'faq' || isFAQ(cleanText)) {
-    if (USE_CONVERSATION_ENGINE) {
-      const updatedCandidate = await prisma.candidate.findUnique({ where: { id: candidate.id } });
-      const { vacancy, recentMessages, nextSlot } = await buildEngineContext(prisma, updatedCandidate);
-      const replyText = await runChatEngine({
-        prisma,
-        candidate: updatedCandidate,
-        vacancy,
-        inboundText: cleanText,
-        recentMessages,
-        nextSlot,
-      });
-      return reply(prisma, updatedCandidate.id, from, replyText, cleanText, { body: replyText, source: 'engine' });
+  if (candidate.status === CandidateStatus.RECHAZADO) return reply(prisma, candidate.id, from, DESCARTE_MSG);
+
+  if (candidate.currentStep === ConversationStep.MENU) {
+    const resolution = await resolveVacancyForCandidate();
+    const updateData = { currentStep: ConversationStep.GREETING_SENT };
+    if (resolution.resolved && resolution.vacancy) updateData.vacancyId = resolution.vacancy.id;
+    await prisma.candidate.update({ where: { id: candidate.id }, data: updateData });
+
+    if (resolution.resolved && resolution.vacancy) {
+      const candidateState = { ...candidate, currentStep: ConversationStep.GREETING_SENT, vacancyId: resolution.vacancy.id };
+      return replyWithVacancyContext(candidateState, resolution.vacancy);
     }
-    return reply(prisma, candidate.id, from, FAQ_RESPONSE, cleanText, { body: FAQ_RESPONSE, source: 'bot_flow' });
+
+    return reply(prisma, candidate.id, from, SALUDO_INICIAL, cleanText, { body: SALUDO_INICIAL, source: 'bot_vacancy_prompt' });
   }
 
-  if (candidate.status === CandidateStatus.RECHAZADO) return reply(prisma, candidate.id, from, DESCARTE_MSG);
-  if (candidate.currentStep === ConversationStep.MENU) {
-    await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.GREETING_SENT } });
-    return reply(prisma, candidate.id, from, SALUDO_INICIAL, cleanText, { body: SALUDO_INICIAL, source: 'bot_flow' });
+  if (candidate.currentStep === ConversationStep.GREETING_SENT && !candidate.vacancyId) {
+    if (isNegativeInterest(cleanText)) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          currentStep: ConversationStep.DONE,
+          reminderScheduledFor: null,
+          reminderState: 'SKIPPED'
+        }
+      });
+      await reply(prisma, candidate.id, from, CIERRE_NO_INTERES, cleanText, { body: CIERRE_NO_INTERES, source: 'bot_flow' });
+      return;
+    }
+
+    const resolution = await resolveVacancyForCandidate();
+    if (resolution.resolved && resolution.vacancy) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { vacancyId: resolution.vacancy.id }
+      });
+      const candidateState = { ...candidate, vacancyId: resolution.vacancy.id };
+      return replyWithVacancyContext(candidateState, resolution.vacancy);
+    }
+
+    return reply(prisma, candidate.id, from, SALUDO_INICIAL, cleanText, { body: SALUDO_INICIAL, source: 'bot_vacancy_prompt' });
   }
+
+  const currentVacancy = candidate.vacancyId ? await loadVacancyContext(prisma, candidate.vacancyId) : null;
+
+  if (resolvedIntent === 'faq' || isFAQ(cleanText)) {
+    if (currentVacancy) return replyWithVacancyContext(candidate, currentVacancy);
+    return reply(prisma, candidate.id, from, FAQ_RESPONSE, cleanText, { body: FAQ_RESPONSE, source: 'bot_vacancy_prompt' });
+  }
+
   if (candidate.currentStep === ConversationStep.ASK_CV && !hasDataIntent) return reply(prisma, candidate.id, from, RECORDATORIO_HV, cleanText, { body: RECORDATORIO_HV, source: 'bot_cv_request' });
+
   if (candidate.currentStep === ConversationStep.DONE) {
     if (resolvedIntent === 'cv_intent') return reply(prisma, candidate.id, from, MENSAJE_DONE_CV_REPEAT, cleanText, { body: MENSAJE_DONE_CV_REPEAT, source: 'bot_cv_request' });
     if (resolvedIntent === 'post_completion_ack' || isPostCompletionAck(cleanText) || ['thanks', 'farewell'].includes(resolvedIntent)) {
@@ -465,6 +574,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
       await reply(prisma, candidate.id, from, CIERRE_NO_INTERES, cleanText, { body: CIERRE_NO_INTERES, source: 'bot_flow' });
       return;
     }
+
     if (isAffirmativeInterest(cleanText) || hasDataIntent) {
       await prisma.candidate.update({ where: { id: candidate.id }, data: { currentStep: ConversationStep.COLLECTING_DATA } });
       if (hasDataIntent) {
