@@ -21,8 +21,6 @@
       --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
-
-    /* Navbar */
     .navbar { background: var(--navy); padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 52px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
     .navbar a { color: #cbd5e0; text-decoration: none; font-size: 13px; font-weight: 500; padding: 4px 2px; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; }
     .navbar a:hover { color: #fff; border-bottom-color: rgba(255,255,255,.3); }
@@ -31,16 +29,13 @@
     .navbar .spacer { flex: 1; }
     .btn-logout { background: transparent; border: 1px solid rgba(255,255,255,.25); color: #cbd5e0 !important; padding: 5px 12px !important; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; }
     .btn-logout:hover { border-color: rgba(255,255,255,.6) !important; color: #fff !important; }
-
     .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
     .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
     .page-header h1 { font-size: 20px; font-weight: 700; color: var(--navy); }
     .page-header .sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-
     .alert { padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; margin-bottom: 20px; }
     .alert-success { background: var(--green-light); color: var(--green); border: 1px solid #86efac; }
     .alert-error   { background: var(--red-light);   color: var(--red);   border: 1px solid #fca5a5; }
-
     .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: all .15s; }
     .btn-primary   { background: var(--teal);  color: #fff; }
     .btn-primary:hover { background: var(--teal-hover); }
@@ -49,23 +44,18 @@
     .btn-danger    { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
     .btn-danger:hover { background: #fecaca; }
     .btn-sm { padding: 5px 11px; font-size: 12px; }
-
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
     thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
     tbody td { padding: 12px 14px; border-bottom: 1px solid var(--border-soft); font-size: 13px; vertical-align: middle; }
     tbody tr:last-child td { border-bottom: none; }
     tbody tr:hover td { background: #fafbfc; }
-
     .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .badge-open   { background: var(--green-light); color: var(--green); }
     .badge-paused { background: var(--amber-light); color: var(--amber); }
     .badge-closed { background: var(--red-light);   color: var(--red); }
     .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-    .dot-green { background: var(--green); }
-    .dot-amber { background: var(--amber); }
-    .dot-red   { background: var(--red); }
-
+    .dot-green { background: var(--green); } .dot-amber { background: var(--amber); } .dot-red { background: var(--red); }
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
     .modal-overlay.open { display: flex; }
     .modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 680px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
@@ -75,7 +65,6 @@
     .modal-close:hover { color: var(--text); background: var(--gray-light); }
     .modal-body { padding: 20px 24px; }
     .modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
-
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
     .form-grid .full { grid-column: 1 / -1; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -88,59 +77,34 @@
     .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
       border-color: var(--teal); box-shadow: 0 0 0 3px rgba(13,122,107,.12);
     }
-    .form-group input[readonly] {
-      background: var(--gray-light); color: var(--text-faint); cursor: default;
-      border-color: var(--border-soft);
-    }
+    .form-group input[readonly] { background: var(--gray-light); color: var(--text-faint); cursor: default; border-color: var(--border-soft); }
     .form-group textarea { resize: vertical; min-height: 70px; }
     .form-hint { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
     .section-divider { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border-soft); grid-column: 1 / -1; }
-
-    /* ── Toggle switch (isActive) ── */
-    .toggle-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 14px; border-radius: var(--radius);
-      border: 2px solid var(--border); background: var(--surface-2);
-      transition: border-color .15s, background .15s;
-    }
+    .op-select-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .op-city-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); padding: 6px 10px 2px; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface-2); transition: border-color .15s, background .15s; }
     .toggle-row.is-active { border-color: var(--teal); background: var(--teal-light); }
     .toggle-row-body { display: flex; flex-direction: column; gap: 2px; }
     .toggle-row-title { font-size: 13px; font-weight: 700; color: var(--text); }
     .toggle-row-desc  { font-size: 11px; color: var(--text-muted); }
     .toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
     .toggle-switch input { opacity: 0; width: 0; height: 0; }
-    .toggle-track {
-      position: absolute; inset: 0; cursor: pointer;
-      background: #cbd5e0; border-radius: 24px;
-      transition: background .2s;
-    }
-    .toggle-track::before {
-      content: ''; position: absolute; width: 18px; height: 18px;
-      left: 3px; top: 3px; background: #fff; border-radius: 50%;
-      transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
-    }
+    .toggle-track { position: absolute; inset: 0; cursor: pointer; background: #cbd5e0; border-radius: 24px; transition: background .2s; }
+    .toggle-track::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
     .toggle-switch input:checked + .toggle-track { background: var(--teal); }
     .toggle-switch input:checked + .toggle-track::before { transform: translateX(18px); }
-
-    /* ── Radio mode selector (flujo bot) ── */
     .mode-group { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-    .mode-option {
-      display: flex; align-items: flex-start; gap: 12px;
-      padding: 12px 14px; border-radius: var(--radius);
-      border: 2px solid var(--border); background: var(--surface-2);
-      cursor: pointer; transition: border-color .15s, background .15s, opacity .15s;
-    }
+    .mode-option { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s, opacity .15s; }
     .mode-option:hover:not(.mode-disabled) { border-color: #a0c4be; background: #f3faf9; }
     .mode-option.mode-disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
     .mode-option input[type=radio] { margin-top: 2px; width: 16px; height: 16px; accent-color: var(--teal); flex-shrink: 0; cursor: pointer; }
     .mode-option:has(input:checked) { border-color: var(--teal); background: var(--teal-light); }
     .mode-option-title { font-size: 13px; font-weight: 700; color: var(--text); }
     .mode-option-desc  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
     .empty-state { text-align: center; padding: 48px 24px; color: var(--text-faint); }
     .empty-state .empty-icon { font-size: 36px; margin-bottom: 10px; }
-    .empty-state p { font-size: 14px; }
-
+    .no-ops-warn { font-size: 12px; color: var(--amber); background: var(--amber-light); border: 1px solid #fcd34d; border-radius: var(--radius); padding: 8px 12px; }
     @media (max-width: 640px) {
       .form-grid { grid-template-columns: 1fr; }
       .form-grid .full { grid-column: 1; }
@@ -156,6 +120,7 @@
   </a>
   <a href="/admin">Panel</a>
   <a href="/admin/vacancies" class="nav-active">Vacantes</a>
+  <a href="/admin/locations">Ciudades</a>
   <% if (role === 'dev') { %>
     <a href="/admin/monitor">Monitor</a>
   <% } %>
@@ -166,7 +131,6 @@
 </nav>
 
 <div class="page">
-
   <div class="page-header">
     <div>
       <h1>Gestión de Vacantes</h1>
@@ -175,12 +139,8 @@
     <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
   </div>
 
-  <% if (successMsg) { %>
-    <div class="alert alert-success">✅ <%= successMsg %></div>
-  <% } %>
-  <% if (errorMsg) { %>
-    <div class="alert alert-error">⚠️ <%= errorMsg %></div>
-  <% } %>
+  <% if (successMsg) { %><div class="alert alert-success">✅ <%= successMsg %></div><% } %>
+  <% if (errorMsg)   { %><div class="alert alert-error">⚠️ <%= errorMsg %></div><% } %>
 
   <% if (vacancies.length === 0) { %>
     <div class="card">
@@ -193,16 +153,14 @@
   <% } else { %>
   <div class="card">
     <table>
-      <thead>
-        <tr>
-          <th>Vacante</th>
-          <th>Ciudad</th>
-          <th>Clave (key)</th>
-          <th>Modo bot</th>
-          <th>Estado</th>
-          <th>Acciones</th>
-        </tr>
-      </thead>
+      <thead><tr>
+        <th>Vacante</th>
+        <th>Operación</th>
+        <th>Clave (key)</th>
+        <th>Modo bot</th>
+        <th>Estado</th>
+        <th>Acciones</th>
+      </tr></thead>
       <tbody>
         <% for (const v of vacancies) { %>
           <%
@@ -210,19 +168,20 @@
             const isPaused = v.isActive && !v.acceptingApplications;
             const isClosed = !v.isActive;
             const badgeCls = isOpen ? 'badge-open' : (isPaused ? 'badge-paused' : 'badge-closed');
-            const dotCls   = isOpen ? 'dot-green' : (isPaused ? 'dot-amber' : 'dot-red');
-            const badgeTxt = isOpen ? 'Abierta' : (isPaused ? 'Pausada' : 'Inactiva');
+            const dotCls   = isOpen ? 'dot-green'  : (isPaused ? 'dot-amber'   : 'dot-red');
+            const badgeTxt = isOpen ? 'Abierta'    : (isPaused ? 'Pausada'     : 'Inactiva');
             const modeIcon = v.schedulingEnabled ? '🗓️' : '📋';
             const modeTxt  = v.schedulingEnabled ? 'Con entrevista' : 'Solo HV';
-            const toggleLabel = isOpen ? 'Pausar' : (isPaused ? 'Reabrir' : 'Activar');
             const toggleClass = isOpen ? 'btn-danger' : 'btn-secondary';
+            const toggleLabel = isOpen ? 'Pausar'     : (isPaused ? 'Reabrir'  : 'Activar');
+            const opLabel = v.operation ? `${v.operation.city.name} › ${v.operation.name}` : (v.city || '—');
           %>
           <tr>
             <td>
               <div style="font-weight:700;color:var(--navy);"><%= v.title %></div>
               <% if (v.role) { %><div style="font-size:11px;color:var(--text-muted);"><%= v.role %></div><% } %>
             </td>
-            <td><%= v.city %></td>
+            <td><span style="font-size:12px;"><%= opLabel %></span></td>
             <td><code style="background:var(--gray-light);padding:2px 6px;border-radius:4px;font-size:12px;"><%= v.key %></code></td>
             <td><span style="font-size:12px;"><%= modeIcon %> <%= modeTxt %></span></td>
             <td><span class="badge <%= badgeCls %>"><span class="dot <%= dotCls %>"></span><%= badgeTxt %></span></td>
@@ -240,7 +199,6 @@
     </table>
   </div>
   <% } %>
-
 </div>
 
 <!-- ── Modal Crear ── -->
@@ -256,30 +214,47 @@
 
           <div class="section-divider">Información básica</div>
 
+          <div class="form-group full">
+            <label for="c-operation">Operación / Zona <span style="color:var(--red)">*</span></label>
+            <% if (operations.length === 0) { %>
+              <div class="no-ops-warn">⚠️ No hay operaciones configuradas. <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Crea ciudades y operaciones primero →</a></div>
+              <input type="hidden" name="operationId" value="" />
+            <% } else { %>
+            <select id="c-operation" name="operationId" required onchange="updateCreateKeyFromOp('c')">
+              <option value="">— Selecciona operación —</option>
+              <% let lastCity = null; %>
+              <% for (const op of operations) { %>
+                <% if (op.city.name !== lastCity) { lastCity = op.city.name; %>
+                  <optgroup label="📍 <%= op.city.name %>">
+                <% } %>
+                <option value="<%= op.id %>" data-city="<%= op.city.name %>" data-op="<%= op.name %>">
+                  <%= op.name %>
+                </option>
+              <% } %>
+            </select>
+            <% } %>
+            <span class="form-hint">La ciudad se deriva automáticamente de la operación seleccionada.</span>
+          </div>
+
           <div class="form-group">
             <label for="c-title">Título <span style="color:var(--red)">*</span></label>
-            <input id="c-title" name="title" type="text" required placeholder="Ej: Auxiliar de Cargue" oninput="updateCreateKey()" />
+            <input id="c-title" name="title" type="text" required placeholder="Ej: Auxiliar de Cargue" oninput="updateCreateKeyFromOp('c')" />
           </div>
           <div class="form-group">
-            <label for="c-city">Ciudad <span style="color:var(--red)">*</span></label>
-            <input id="c-city" name="city" type="text" required placeholder="Ej: Ibagué" oninput="updateCreateKey()" />
+            <label for="c-role">Rol / Cargo</label>
+            <input id="c-role" name="role" type="text" placeholder="Ej: Auxiliar de Cargue y Descargue" />
           </div>
           <div class="form-group full">
             <label for="c-key">Clave interna (key)</label>
             <input id="c-key" name="key" type="text" readonly placeholder="Se genera automáticamente" />
             <span class="form-hint">Generada desde título + ciudad. Identificador interno — no se muestra al candidato.</span>
           </div>
-          <div class="form-group">
-            <label for="c-role">Rol / Cargo</label>
-            <input id="c-role" name="role" type="text" placeholder="Ej: Auxiliar de Cargue y Descargue" />
-          </div>
-          <div class="form-group">
+          <div class="form-group full">
             <label for="c-address">Dirección de operación</label>
-            <input id="c-address" name="operationAddress" type="text" placeholder="Ej: Carrera 5 # 10-20, Ibagué" />
+            <input id="c-address" name="operationAddress" type="text" placeholder="Ej: Carrera 5 # 10-20" />
           </div>
 
           <div class="section-divider">Edad y experiencia</div>
-
           <div class="form-group">
             <label for="c-minAge">Edad mínima</label>
             <input id="c-minAge" name="minAge" type="number" min="14" max="99" placeholder="18" />
@@ -292,13 +267,12 @@
             <label for="c-exp">Experiencia requerida</label>
             <select id="c-exp" name="experienceRequired">
               <option value="INDIFFERENT">Indiferente</option>
-              <option value="REQUIRED">Requerida</option>
-              <option value="NOT_REQUIRED">No requerida</option>
+              <option value="YES">Requerida</option>
+              <option value="NO">No requerida</option>
             </select>
           </div>
 
           <div class="section-divider">Textos para el bot</div>
-
           <div class="form-group full">
             <label for="c-desc">Descripción de la vacante</label>
             <textarea id="c-desc" name="description" placeholder="Breve descripción para mostrar al candidato…"></textarea>
@@ -313,8 +287,6 @@
           </div>
 
           <div class="section-divider">Configuración</div>
-
-          <!-- Checkbox: Vacante activa -->
           <div class="full">
             <div class="toggle-row" id="c-toggle-row">
               <div class="toggle-row-body">
@@ -327,12 +299,9 @@
               </label>
             </div>
           </div>
-
-          <!-- Radio: flujo del bot (solo habilitado si isActive) -->
           <div class="full">
             <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Flujo del bot</p>
             <div class="mode-group" id="c-flow" role="radiogroup" aria-label="Flujo del bot">
-
               <label class="mode-option mode-disabled">
                 <input type="radio" name="c_vacancyFlow" value="apply_only" checked disabled />
                 <div class="mode-option-body">
@@ -340,7 +309,6 @@
                   <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Cierra con "quedaste registrado, te contactamos". Sin entrevista.</div>
                 </div>
               </label>
-
               <label class="mode-option mode-disabled">
                 <input type="radio" name="c_vacancyFlow" value="apply_schedule" disabled />
                 <div class="mode-option-body">
@@ -348,10 +316,8 @@
                   <div class="mode-option-desc">El bot recolecta datos, hoja de vida y agenda la entrevista automáticamente (candidatas femeninas siempre siguen flujo solo postulación).</div>
                 </div>
               </label>
-
             </div>
           </div>
-
         </div>
       </div>
       <div class="modal-footer">
@@ -375,30 +341,46 @@
 
           <div class="section-divider">Información básica</div>
 
+          <div class="form-group full">
+            <label for="e-operation">Operación / Zona</label>
+            <% if (operations.length === 0) { %>
+              <div class="no-ops-warn">⚠️ Sin operaciones. <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Configurar →</a></div>
+              <input type="hidden" name="operationId" value="" />
+            <% } else { %>
+            <select id="e-operation" name="operationId" onchange="updateCreateKeyFromOp('e')">
+              <option value="">— Sin operación asignada —</option>
+              <% let lastCityE = null; %>
+              <% for (const op of operations) { %>
+                <% if (op.city.name !== lastCityE) { lastCityE = op.city.name; %>
+                  <optgroup label="📍 <%= op.city.name %>">
+                <% } %>
+                <option value="<%= op.id %>" data-city="<%= op.city.name %>" data-op="<%= op.name %>">
+                  <%= op.name %>
+                </option>
+              <% } %>
+            </select>
+            <% } %>
+          </div>
+
           <div class="form-group">
             <label for="e-title">Título <span style="color:var(--red)">*</span></label>
-            <input id="e-title" name="title" type="text" required />
-          </div>
-          <div class="form-group">
-            <label for="e-city">Ciudad <span style="color:var(--red)">*</span></label>
-            <input id="e-city" name="city" type="text" required />
-          </div>
-          <div class="form-group full">
-            <label for="e-key">Clave interna (key) <span style="color:var(--red)">*</span></label>
-            <input id="e-key" name="key" type="text" required />
-            <span class="form-hint">Identificador interno — no se muestra al candidato. Cambiar puede afectar el enrutamiento del bot.</span>
+            <input id="e-title" name="title" type="text" required oninput="updateCreateKeyFromOp('e')" />
           </div>
           <div class="form-group">
             <label for="e-role">Rol / Cargo</label>
             <input id="e-role" name="role" type="text" />
           </div>
-          <div class="form-group">
+          <div class="form-group full">
+            <label for="e-key">Clave interna (key) <span style="color:var(--red)">*</span></label>
+            <input id="e-key" name="key" type="text" required />
+            <span class="form-hint">Identificador interno — cambiar puede afectar el enrutamiento del bot.</span>
+          </div>
+          <div class="form-group full">
             <label for="e-address">Dirección de operación</label>
             <input id="e-address" name="operationAddress" type="text" />
           </div>
 
           <div class="section-divider">Edad y experiencia</div>
-
           <div class="form-group">
             <label for="e-minAge">Edad mínima</label>
             <input id="e-minAge" name="minAge" type="number" min="14" max="99" />
@@ -411,13 +393,12 @@
             <label for="e-exp">Experiencia requerida</label>
             <select id="e-exp" name="experienceRequired">
               <option value="INDIFFERENT">Indiferente</option>
-              <option value="REQUIRED">Requerida</option>
-              <option value="NOT_REQUIRED">No requerida</option>
+              <option value="YES">Requerida</option>
+              <option value="NO">No requerida</option>
             </select>
           </div>
 
           <div class="section-divider">Textos para el bot</div>
-
           <div class="form-group full">
             <label for="e-desc">Descripción de la vacante</label>
             <textarea id="e-desc" name="description"></textarea>
@@ -432,8 +413,6 @@
           </div>
 
           <div class="section-divider">Configuración</div>
-
-          <!-- Checkbox: Vacante activa -->
           <div class="full">
             <div class="toggle-row" id="e-toggle-row">
               <div class="toggle-row-body">
@@ -446,12 +425,9 @@
               </label>
             </div>
           </div>
-
-          <!-- Radio: flujo del bot -->
           <div class="full">
             <p style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Flujo del bot</p>
             <div class="mode-group" id="e-flow" role="radiogroup" aria-label="Flujo del bot">
-
               <label class="mode-option">
                 <input type="radio" name="e_vacancyFlow" value="apply_only" />
                 <div class="mode-option-body">
@@ -459,7 +435,6 @@
                   <div class="mode-option-desc">El bot recolecta datos y hoja de vida. Cierra con "quedaste registrado, te contactamos". Sin entrevista.</div>
                 </div>
               </label>
-
               <label class="mode-option">
                 <input type="radio" name="e_vacancyFlow" value="apply_schedule" />
                 <div class="mode-option-body">
@@ -467,10 +442,8 @@
                   <div class="mode-option-desc">El bot recolecta datos, hoja de vida y agenda la entrevista automáticamente (candidatas femeninas siempre siguen flujo solo postulación).</div>
                 </div>
               </label>
-
             </div>
           </div>
-
         </div>
       </div>
       <div class="modal-footer">
@@ -482,87 +455,59 @@
 </div>
 
 <script>
-  // ── Sincronizar estado del checkbox con los radios ─────────────────
-  // Cuando isActive=false → radios deshabilitados + clase mode-disabled
-  // Cuando isActive=true  → radios habilitados, seleccionar el primero si ninguno está checked
   function syncActiveState(checkboxId, flowGroupId, toggleRowId) {
-    const checkbox   = document.getElementById(checkboxId);
-    const flowGroup  = document.getElementById(flowGroupId);
-    const toggleRow  = document.getElementById(toggleRowId);
-    const isChecked  = checkbox.checked;
-    const radios     = flowGroup.querySelectorAll('input[type=radio]');
-    const labels     = flowGroup.querySelectorAll('.mode-option');
-
-    // Toggle row highlight
+    const checkbox  = document.getElementById(checkboxId);
+    const flowGroup = document.getElementById(flowGroupId);
+    const toggleRow = document.getElementById(toggleRowId);
+    const isChecked = checkbox.checked;
+    const radios    = flowGroup.querySelectorAll('input[type=radio]');
+    const labels    = flowGroup.querySelectorAll('.mode-option');
     toggleRow.classList.toggle('is-active', isChecked);
-
-    // Habilitar / deshabilitar radios
     radios.forEach(r => r.disabled = !isChecked);
     labels.forEach(l => l.classList.toggle('mode-disabled', !isChecked));
-
-    // Si se activa y ningún radio está checked → seleccionar el primero
-    if (isChecked) {
-      const hasChecked = Array.from(radios).some(r => r.checked);
-      if (!hasChecked) radios[0].checked = true;
-    }
+    if (isChecked && !Array.from(radios).some(r => r.checked)) radios[0].checked = true;
   }
 
-  // ── Inyectar campos que el backend espera al submit ────────────────
-  // isActive           → checkbox
-  // acceptingApplications → siempre true cuando isActive=true
-  // schedulingEnabled  → según el radio seleccionado
   function injectConfigFields(formId, checkboxId, flowGroupId) {
     const form      = document.getElementById(formId);
     const checkbox  = document.getElementById(checkboxId);
     const flowGroup = document.getElementById(flowGroupId);
     const isActive  = checkbox.checked;
     const flowVal   = flowGroup.querySelector('input[type=radio]:checked')?.value || 'apply_only';
-
     const fields = {
-      isActive:               isActive,
-      acceptingApplications:  isActive,   // si está activa, siempre acepta postulaciones
-      schedulingEnabled:      isActive && flowVal === 'apply_schedule'
+      isActive,
+      acceptingApplications: isActive,
+      schedulingEnabled: isActive && flowVal === 'apply_schedule'
     };
-
-    // Limpiar inyecciones previas
     form.querySelectorAll('input[data-cfg-injected]').forEach(el => el.remove());
-
     Object.entries(fields).forEach(([name, value]) => {
       const input = document.createElement('input');
-      input.type  = 'hidden';
-      input.name  = name;
-      input.value = value ? 'true' : '';
+      input.type  = 'hidden'; input.name = name; input.value = value ? 'true' : '';
       input.dataset.cfgInjected = '1';
       form.appendChild(input);
     });
-
     return true;
   }
 
-  // ── Slug generator ───────────────────────────────────────────
   function toSlug(str) {
-    return str
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s-]/g, '')
-      .trim()
-      .replace(/[\s]+/g, '-')
-      .replace(/-+/g, '-');
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '').trim().replace(/[\s]+/g, '-').replace(/-+/g, '-');
   }
 
-  function updateCreateKey() {
-    const title = document.getElementById('c-title').value;
-    const city  = document.getElementById('c-city').value;
-    document.getElementById('c-key').value = [title, city].filter(Boolean).map(toSlug).join('-');
+  // Actualiza key usando ciudad derivada del select de operación
+  function updateCreateKeyFromOp(prefix) {
+    const sel   = document.getElementById(prefix + '-operation');
+    const title = document.getElementById(prefix + '-title')?.value || '';
+    const keyEl = document.getElementById(prefix + '-key');
+    if (!sel || !keyEl) return;
+    const selectedOpt = sel.options[sel.selectedIndex];
+    const city = selectedOpt?.dataset?.city || '';
+    keyEl.value = [title, city].filter(Boolean).map(toSlug).join('-');
   }
 
-  // ── Modal helpers ───────────────────────────────────────────
   function openCreate() {
-    document.getElementById('c-key').value  = '';
-    const cb    = document.getElementById('c-isActive');
-    cb.checked  = false;
-    // Estado inicial: inactiva, radios deshabilitados
+    const cb = document.getElementById('c-isActive');
+    cb.checked = false;
     syncActiveState('c-isActive', 'c-flow', 'c-toggle-row');
     document.getElementById('modalCreate').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -571,11 +516,9 @@
   function openEdit(v) {
     const f = document.getElementById('formEdit');
     f.action = '/admin/vacancies/' + v.id + '/edit';
-
     document.getElementById('e-title').value   = v.title || '';
-    document.getElementById('e-city').value    = v.city  || '';
-    document.getElementById('e-key').value     = v.key   || '';
     document.getElementById('e-role').value    = v.role  || '';
+    document.getElementById('e-key').value     = v.key   || '';
     document.getElementById('e-address').value = v.operationAddress || '';
     document.getElementById('e-minAge').value  = v.minAge != null ? v.minAge : '';
     document.getElementById('e-maxAge').value  = v.maxAge != null ? v.maxAge : '';
@@ -584,18 +527,19 @@
     document.getElementById('e-req').value     = v.requirements || '';
     document.getElementById('e-cond').value    = v.conditions   || '';
 
-    // Checkbox
-    const cb   = document.getElementById('e-isActive');
+    // Seleccionar operación si existe
+    const opSel = document.getElementById('e-operation');
+    if (opSel && v.operationId) {
+      opSel.value = v.operationId;
+    } else if (opSel) {
+      opSel.value = '';
+    }
+
+    const cb = document.getElementById('e-isActive');
     cb.checked = !!v.isActive;
-
-    // Radio: derivar flujo desde schedulingEnabled
     const flow  = v.schedulingEnabled ? 'apply_schedule' : 'apply_only';
-    const group = document.getElementById('e-flow');
-    group.querySelectorAll('input[type=radio]').forEach(r => r.checked = (r.value === flow));
-
-    // Sincronizar estado de los radios con el checkbox
+    document.getElementById('e-flow').querySelectorAll('input[type=radio]').forEach(r => r.checked = (r.value === flow));
     syncActiveState('e-isActive', 'e-flow', 'e-toggle-row');
-
     document.getElementById('modalEdit').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
@@ -606,19 +550,14 @@
   }
 
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.addEventListener('click', e => {
-      if (e.target === overlay) closeModal(overlay.id);
-    });
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); });
   });
-
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
   });
-
   setTimeout(() => {
     document.querySelectorAll('.alert').forEach(a => {
-      a.style.transition = 'opacity .4s';
-      a.style.opacity = '0';
+      a.style.transition = 'opacity .4s'; a.style.opacity = '0';
       setTimeout(() => a.remove(), 400);
     });
   }, 5000);

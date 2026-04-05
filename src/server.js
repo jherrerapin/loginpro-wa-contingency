@@ -5,9 +5,11 @@ import { fileURLToPath } from 'url';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import bcrypt from 'bcrypt';
+import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { webhookRouter } from './routes/webhook.js';
 import { adminRouter } from './routes/admin.js';
+import { locationsRouter } from './routes/locations.js';
 import { runReminderDispatcher } from './services/reminder.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,18 +35,13 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-// Tabla de sesiones en PostgreSQL.
-// connect-pg-simple crea la tabla "session" automáticamente si no existe
-// cuando se pasa createTableIfMissing: true.
-// La conexión reutiliza la DATABASE_URL ya configurada en el entorno,
-// por lo que no requiere variables adicionales.
 const PgStore = connectPgSimple(session);
 const sessionStore = new PgStore({
   conString: process.env.DATABASE_URL,
   tableName: 'session',
   createTableIfMissing: true,
-  // Limpia sesiones expiradas cada hora para no acumular basura en la tabla.
   pruneSessionInterval: 60 * 60
 });
 
@@ -73,75 +70,31 @@ app.get('/health', async (_req, res) => {
 });
 
 app.get('/login', (req, res) => {
-  if (req.session?.userRole) {
-    return res.redirect('/admin');
-  }
-
-  res.render('login', {
-    error: null,
-    username: ''
-  });
+  if (req.session?.userRole) return res.redirect('/admin');
+  res.render('login', { error: null, username: '' });
 });
 
-/**
- * Verifica las credenciales del usuario contra las variables de entorno.
- *
- * Soporta dos formatos:
- *   1. Hash bcrypt  — si la variable empieza con "$2b$" se usa bcrypt.compare()
- *   2. Texto plano  — comparación directa (solo para desarrollo / migración gradual)
- *
- * Para generar un hash desde la CLI:
- *   node -e "import('bcrypt').then(m => m.default.hash('tu_password', 12).then(console.log))"
- *
- * Una vez generado, reemplaza el valor de DEV_PASS o ADMIN_PASS en el .env por el hash.
- */
 async function verifyCredential(plain, envValue) {
   if (!envValue) return false;
   if (envValue.startsWith('$2b$') || envValue.startsWith('$2a$')) {
     return bcrypt.compare(plain, envValue);
   }
-  // Fallback texto plano: permite migración gradual sin forzar cambio inmediato.
   return plain === envValue;
 }
 
 app.post('/login', async (req, res) => {
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
-
   let role = null;
-
-  if (username === process.env.DEV_USER && await verifyCredential(password, process.env.DEV_PASS)) {
-    role = 'dev';
-  } else if (username === process.env.ADMIN_USER && await verifyCredential(password, process.env.ADMIN_PASS)) {
-    role = 'admin';
-  }
-
-  if (!role) {
-    return res.status(401).render('login', {
-      error: 'Usuario o contraseña inválidos.',
-      username
-    });
-  }
-
+  if (username === process.env.DEV_USER && await verifyCredential(password, process.env.DEV_PASS)) role = 'dev';
+  else if (username === process.env.ADMIN_USER && await verifyCredential(password, process.env.ADMIN_PASS)) role = 'admin';
+  if (!role) return res.status(401).render('login', { error: 'Usuario o contraseña inválidos.', username });
   req.session.regenerate((regenError) => {
-    if (regenError) {
-      return res.status(500).render('login', {
-        error: 'No fue posible iniciar sesión. Intenta nuevamente.',
-        username
-      });
-    }
-
+    if (regenError) return res.status(500).render('login', { error: 'No fue posible iniciar sesión. Intenta nuevamente.', username });
     req.session.userRole = role;
     req.session.username = username;
-
     req.session.save((saveError) => {
-      if (saveError) {
-        return res.status(500).render('login', {
-          error: 'No fue posible iniciar sesión. Intenta nuevamente.',
-          username
-        });
-      }
-
+      if (saveError) return res.status(500).render('login', { error: 'No fue posible iniciar sesión. Intenta nuevamente.', username });
       return res.redirect('/admin');
     });
   });
@@ -159,6 +112,7 @@ app.get('/logout', destroySession);
 
 app.use('/webhook', webhookRouter(prisma));
 app.use('/admin', adminRouter(prisma));
+app.use('/admin/locations', locationsRouter(prisma));
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -166,15 +120,10 @@ app.use((err, _req, res, _next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server listening on ${port}`);
-});
+app.listen(port, () => console.log(`Server listening on ${port}`));
 
 const reminderIntervalMs = 60_000;
 setInterval(async () => {
-  try {
-    await runReminderDispatcher(prisma);
-  } catch (error) {
-    console.error('[REMINDER_DISPATCHER_ERROR]', error);
-  }
+  try { await runReminderDispatcher(prisma); }
+  catch (error) { console.error('[REMINDER_DISPATCHER_ERROR]', error); }
 }, reminderIntervalMs);
