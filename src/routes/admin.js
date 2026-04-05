@@ -182,6 +182,14 @@ function hasPdfSignature(buffer) {
   return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
 }
 
+function decorateDashboardCandidate(candidate) {
+  return {
+    ...candidate,
+    hasCv: candidateHasCv(candidate),
+    isFemaleHumanReview: isFemaleHumanReviewCandidate(candidate)
+  };
+}
+
 async function buildDashboardData(prisma, dateStr) {
   const { start, end } = colombiaDayBounds(dateStr);
 
@@ -212,7 +220,7 @@ async function buildDashboardData(prisma, dateStr) {
               id: true, fullName: true, phone: true,
               documentType: true, documentNumber: true,
               age: true, neighborhood: true, status: true,
-              cvData: true, gender: true,
+              cvOriginalName: true, cvMimeType: true, gender: true,
               botPaused: true, botPauseReason: true,
               currentStep: true
             }
@@ -227,7 +235,7 @@ async function buildDashboardData(prisma, dateStr) {
           id: true, fullName: true, phone: true,
           documentType: true, documentNumber: true,
           age: true, neighborhood: true, status: true,
-          cvData: true, cvOriginalName: true, cvMimeType: true,
+          cvOriginalName: true, cvMimeType: true,
           gender: true, createdAt: true,
           botPaused: true, botPauseReason: true,
           currentStep: true,
@@ -251,7 +259,7 @@ async function buildDashboardData(prisma, dateStr) {
       id: true, fullName: true, phone: true,
       documentType: true, documentNumber: true,
       age: true, neighborhood: true, status: true,
-      cvData: true, createdAt: true,
+      cvOriginalName: true, cvMimeType: true, createdAt: true,
       gender: true, botPaused: true, botPauseReason: true,
       currentStep: true
     }
@@ -263,10 +271,7 @@ async function buildDashboardData(prisma, dateStr) {
     const city = v.city || 'Sin ciudad';
     if (!citiesMap.has(city)) citiesMap.set(city, []);
 
-    const candidatesWithFlags = v.candidates.map((candidate) => ({
-      ...candidate,
-      isFemaleHumanReview: isFemaleHumanReviewCandidate(candidate)
-    }));
+    const candidatesWithFlags = v.candidates.map(decorateDashboardCandidate);
     const bookedCandidateIds = new Set(candidatesWithFlags
       .filter((candidate) => candidate.interviewBookings.length > 0)
       .map((candidate) => candidate.id));
@@ -279,6 +284,7 @@ async function buildDashboardData(prisma, dateStr) {
       ...v,
       bookingsToday: v.interviewBookings.map(b => ({
         ...b,
+        candidate: decorateDashboardCandidate(b.candidate),
         formattedTime: formatTimeCO(b.scheduledAt),
         formattedDateTime: formatDateTimeCO(b.scheduledAt),
         isFemaleHumanReview: isFemaleHumanReviewCandidate(b.candidate)
@@ -299,10 +305,7 @@ async function buildDashboardData(prisma, dateStr) {
   const cities = Array.from(citiesMap.entries()).map(([name, vacs]) => ({ name, vacancies: vacs }));
   return {
     cities,
-    legacyCandidates: legacyCandidates.map((candidate) => ({
-      ...candidate,
-      isFemaleHumanReview: isFemaleHumanReviewCandidate(candidate)
-    }))
+    legacyCandidates: legacyCandidates.map(decorateDashboardCandidate)
   };
 }
 

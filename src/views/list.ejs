@@ -573,7 +573,7 @@
                       <td style="font-size:12px;color:var(--text-muted);"><%= b.candidate.documentType && b.candidate.documentNumber ? b.candidate.documentType + ' ' + b.candidate.documentNumber : '—' %></td>
                       <td style="font-size:12px;color:var(--text-muted);"><%= b.candidate.neighborhood || '—' %></td>
                       <td><span class="<%= bs.cls %>" style="font-size:12px;"><%= bs.icon %> <%= bs.text %></span></td>
-                      <td><span class="cv-pill <%= b.candidate.cvData ? 'cv-yes' : 'cv-no' %>"><%= b.candidate.cvData ? '✓ HV' : 'Sin HV' %></span></td>
+                      <td><span class="cv-pill <%= b.candidate.hasCv ? 'cv-yes' : 'cv-no' %>"><%= b.candidate.hasCv ? '✓ HV' : 'Sin HV' %></span></td>
                       <td>
                         <div class="action-stack">
                           <% for (const action of bookingActions) { %>
@@ -616,7 +616,7 @@
                   </div>
                   <div class="candidate-phone"><a href="https://wa.me/<%= c.phone %>" target="_blank" rel="noopener">📱 <%= c.phone %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
-                  <span class="cv-pill <%= c.cvData ? 'cv-yes' : 'cv-no' %>"><%= c.cvData ? '✓ HV' : 'Sin HV' %></span>
+                  <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span>
                   <a href="/admin/candidates/<%= c.id %>" class="link-detail">Ver →</a>
                 </div>
               <% } %>
@@ -682,7 +682,7 @@
                     </div>
                     <div class="candidate-phone"><a href="https://wa.me/<%= c.phone %>" target="_blank" rel="noopener">📱 <%= c.phone %></a></div>
                     <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
-                    <span class="cv-pill <%= c.cvData ? 'cv-yes' : 'cv-no' %>"><%= c.cvData ? '✓ HV' : 'Sin HV' %></span>
+                    <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span>
                     <a href="/admin/candidates/<%= c.id %>" class="link-detail">Ver →</a>
                   </div>
                 <% } %>
@@ -770,7 +770,7 @@
             <td><a href="https://wa.me/<%= c.phone %>" target="_blank" style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>
             <td style="font-size:12px;color:var(--text-muted);"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %></td>
             <td><span class="badge <%= (stBadge[uiSt]||{cls:'badge-nuevo'}).cls %>"><%= (stBadge[uiSt]||{label:uiSt}).label %></span></td>
-            <td><span class="cv-pill <%= c.cvData ? 'cv-yes' : 'cv-no' %>"><%= c.cvData ? '✓ HV' : 'Sin HV' %></span></td>
+            <td><span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span></td>
             <td style="font-size:12px;color:var(--text-muted);"><%= formatDateTimeCO(c.createdAt) %></td>
             <td><a href="/admin/candidates/<%= c.id %>" class="link-detail">Ver →</a></td>
           </tr>
