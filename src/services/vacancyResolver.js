@@ -1,132 +1,211 @@
-/**
- * vacancyResolver.js
- * ──────────────────────────────────────────────────────────────────────
- * Responsabilidad:
- *   Dado un mensaje de texto libre (y/o metadata de imagen), identifica qué
- *   vacante y ciudad está buscando el candidato, usando OpenAI como motor.
- *
- * Reglas del negocio:
- *  • Solo vacantes con acceptingApplications=true son elegibles.
- *  • Si hay exactamente UNA vacante activa, se asigna si el texto es
- *    compatible (no la anuncia proactivamente).
- *  • Si hay VARIAS, el bot pregunta de forma natural cul es la de interés.
- *  • Si el candidato envía la imagen de la publicidad, se detecta por
- *    comparación de mimeType/imageName con las vacantes activas.
- */
+const ROLE_STOPWORDS = new Set([
+  'a', 'al', 'ante', 'aplicar', 'aplicando', 'aplicarme', 'aplico', 'ayuda',
+  'buen', 'buena', 'buenas', 'cargo', 'con', 'continuar', 'cual', 'cuales',
+  'cuanto', 'de', 'del', 'desde', 'deseo', 'el', 'en', 'es', 'esa', 'ese',
+  'esta', 'estoy', 'favor', 'gracias', 'hola', 'informacion', 'interesa',
+  'interesada', 'interesado', 'la', 'las', 'loginpro', 'los', 'me', 'mi',
+  'necesito', 'para', 'por', 'postular', 'postularme', 'puesto', 'que',
+  'quiero', 'rol', 'seria', 'solicito', 'su', 'trabajar', 'trabajo', 'una',
+  'uno', 'vacante', 'y'
+]);
 
-import axios from 'axios';
+export function normalizeResolverText(text = '') {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+function tokenize(text = '') {
+  return normalizeResolverText(text).split(' ').filter(Boolean);
+}
 
-/**
- * Carga las vacantes activas desde Prisma.
- * @param {import('@prisma/client').PrismaClient} prisma
- * @returns {Promise<Array>}
- */
-export async function getActiveVacancies(prisma) {
-  return prisma.vacancy.findMany({
-    where: { acceptingApplications: true },
-    select: {
-      id: true,
-      title: true,
-      role: true,
-      city: true,
-      requirements: true,
-      conditions: true,
-      requiredDocuments: true,
-      roleDescription: true,
-      schedulingEnabled: true,
-      minAge: true,
-      maxAge: true,
-      experienceRequired: true,
-      minExperienceMonths: true,
-      maxExperienceMonths: true,
-      zoneFilterEnabled: true,
-      zoneContext: true
+function canonicalVacancyCity(vacancy) {
+  return vacancy?.operation?.city?.name || vacancy?.city || null;
+}
+
+function buildCityNames(vacancies = []) {
+  return Array.from(new Set(vacancies.map(canonicalVacancyCity).filter(Boolean)));
+}
+
+export function detectCityFromText(text = '', cityNames = []) {
+  const normalized = normalizeResolverText(text);
+  if (!normalized) return null;
+  const padded = ` ${normalized} `;
+
+  let bestMatch = null;
+  for (const cityName of cityNames) {
+    const cityNormalized = normalizeResolverText(cityName);
+    if (!cityNormalized) continue;
+    if (padded.includes(` ${cityNormalized} `)) {
+      if (!bestMatch || cityNormalized.length > bestMatch.normalized.length) {
+        bestMatch = { value: cityName, normalized: cityNormalized };
+      }
     }
+  }
+
+  return bestMatch?.value || null;
+}
+
+function cleanRoleTokens(tokens = [], cityTokens = new Set()) {
+  return tokens.filter((token) => (
+    token
+    && token.length > 1
+    && !ROLE_STOPWORDS.has(token)
+    && !cityTokens.has(token)
+  ));
+}
+
+export function detectRoleHintFromText(text = '', options = {}) {
+  const normalized = normalizeResolverText(text);
+  if (!normalized) return null;
+
+  const cityTokens = new Set(tokenize(options.city || ''));
+  const explicitPatterns = [
+    /\b(?:vacante|cargo|rol|puesto)\s+(?:de|para)?\s*([a-z0-9 ]{3,80})/i,
+    /\b(?:quiero aplicar(?: a)?|quiero postularme(?: a)?|me interesa(?: la)?|estoy interesad[oa] en(?: la)?|informacion(?: de)?(?: la)?|para)\s+(?:vacante|cargo|rol|puesto)?\s*(?:de|para)?\s*([a-z0-9 ]{3,80})/i
+  ];
+
+  for (const pattern of explicitPatterns) {
+    const match = normalized.match(pattern);
+    if (!match?.[1]) continue;
+    const roleTokens = cleanRoleTokens(tokenize(match[1]), cityTokens);
+    if (roleTokens.length) return roleTokens.join(' ');
+  }
+
+  const roleTokens = cleanRoleTokens(tokenize(normalized), cityTokens);
+  return roleTokens.length ? roleTokens.join(' ') : null;
+}
+
+function similarityScore(input = '', candidate = '') {
+  const inputTokens = cleanRoleTokens(tokenize(input));
+  const candidateTokens = cleanRoleTokens(tokenize(candidate));
+  if (!inputTokens.length || !candidateTokens.length) return 0;
+
+  const inputSet = new Set(inputTokens);
+  const candidateSet = new Set(candidateTokens);
+  let overlap = 0;
+  for (const token of inputSet) {
+    if (candidateSet.has(token)) overlap += 1;
+  }
+  if (!overlap) return 0;
+
+  const inputNormalized = normalizeResolverText(input);
+  const candidateNormalized = normalizeResolverText(candidate);
+  let score = overlap / Math.max(inputSet.size, candidateSet.size);
+
+  if (candidateNormalized && inputNormalized) {
+    if (candidateNormalized === inputNormalized) score += 0.9;
+    else if (candidateNormalized.includes(inputNormalized) || inputNormalized.includes(candidateNormalized)) score += 0.45;
+  }
+
+  return score;
+}
+
+function hasInterestSignal(text = '') {
+  return /\b(vacante|cargo|empleo|trabajo|informacion|interesa|interesado|interesada|aplicar|postular|continuar)\b/i
+    .test(normalizeResolverText(text));
+}
+
+function scoreVacancy(vacancy, { text, city, roleHint }) {
+  const vacancyText = [vacancy?.title, vacancy?.role].filter(Boolean).join(' ');
+  const vacancyCity = canonicalVacancyCity(vacancy);
+  let score = 0;
+
+  if (city) {
+    const normalizedVacancyCity = normalizeResolverText(vacancyCity);
+    const normalizedCity = normalizeResolverText(city);
+    if (normalizedVacancyCity !== normalizedCity) return -1;
+    score += 4;
+  }
+
+  if (roleHint) {
+    score += similarityScore(roleHint, vacancyText) * 6;
+  } else {
+    score += similarityScore(text, vacancyText) * 3;
+  }
+
+  const normalizedText = normalizeResolverText(text);
+  const normalizedTitle = normalizeResolverText(vacancy?.title || '');
+  const normalizedRole = normalizeResolverText(vacancy?.role || '');
+
+  if (normalizedTitle && normalizedText.includes(normalizedTitle)) score += 2;
+  if (normalizedRole && normalizedText.includes(normalizedRole)) score += 2;
+
+  return score;
+}
+
+export async function findActiveVacancies(prisma) {
+  return prisma.vacancy.findMany({
+    where: {
+      isActive: true,
+      acceptingApplications: true,
+    },
+    include: {
+      operation: {
+        include: {
+          city: true,
+        },
+      },
+    },
+    orderBy: [
+      { updatedAt: 'desc' },
+      { title: 'asc' },
+    ],
   });
 }
 
-/**
- * Intenta resolver la vacante a partir del texto libre del candidato y la
- * lista de vacantes activas.
- *
- * @param {string} text — texto del mensaje del candidato
- * @param {Array} vacancies — vacantes activas
- * @returns {Promise<{ vacancyId: string|null, confidence: 'high'|'low'|'none', reasoning: string }>}
- */
-export async function resolveVacancyFromText(text, vacancies) {
-  if (!process.env.OPENAI_API_KEY || !vacancies.length) {
-    return { vacancyId: null, confidence: 'none', reasoning: 'no_api_or_vacancies' };
+export async function resolveVacancyFromText(prisma, text, options = {}) {
+  const normalizedText = normalizeResolverText(text);
+  if (!normalizedText) {
+    return { resolved: false, vacancy: null, city: null, roleHint: null, reason: 'empty_input' };
   }
 
-  if (vacancies.length === 1) {
-    return { vacancyId: vacancies[0].id, confidence: 'high', reasoning: 'single_active_vacancy' };
+  const vacancies = options.vacancies || await findActiveVacancies(prisma);
+  if (!vacancies.length) {
+    return { resolved: false, vacancy: null, city: null, roleHint: null, reason: 'no_active_vacancies' };
   }
 
-  const vacancyList = vacancies.map((v, i) =>
-    `[${i + 1}] id=${v.id} | cargo="${v.role}" | ciudad="${v.city}" | descripción=${v.roleDescription || 'sin descripción'}`
-  ).join('\n');
-
-  const systemPrompt = [
-    'Eres un sistema de matching de empleo.',
-    'Dado el texto de un candidato y la lista de vacantes activas, determina cuál vacante quiere.',
-    'Responde SOLO JSON válido con claves: { "vacancyId": string|null, "confidence": "high"|"low"|"none", "reasoning": string }.',
-    '- "high" si el cargo o ciudad mencionados coinciden claramente con una vacante.',
-    '- "low" si hay indicio débil pero no certeza.',
-    '- "none" si no hay información suficiente.'
-  ].join(' ');
-
-  const userPrompt = `Vacantes:\n${vacancyList}\n\nMensaje del candidato: "${text}"`;
-
-  try {
-    const response = await axios.post(
-      OPENAI_URL,
-      {
-        model: DEFAULT_MODEL,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_completion_tokens: 150
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      }
-    );
-
-    const raw = response.data?.choices?.[0]?.message?.content || '{}';
-    const parsed = JSON.parse(raw.trim());
-    return {
-      vacancyId: parsed.vacancyId || null,
-      confidence: parsed.confidence || 'none',
-      reasoning: parsed.reasoning || 'openai_resolved'
-    };
-  } catch {
-    return { vacancyId: null, confidence: 'none', reasoning: 'openai_error' };
+  const city = options.cityHint || detectCityFromText(text, buildCityNames(vacancies));
+  const roleHint = options.roleHint || detectRoleHintFromText(text, { city });
+  if (!city && !roleHint) {
+    return { resolved: false, vacancy: null, city: null, roleHint: null, reason: 'missing_city_and_role' };
   }
-}
 
-/**
- * Intenta resolver la vacante a partir de una imagen enviada por el candidato
- * (compara el imageMimeType/imageName con las vacantes que tienen imagen).
- *
- * Por ahora implementación simple: si solo hay una vacante con imagen y el
- * candidato envió una imagen, se asigna con confidence=low.
- *
- * @param {Array} vacancies — vacantes activas con información de imagen
- * @returns {{ vacancyId: string|null, confidence: 'high'|'low'|'none', reasoning: string }}
- */
-export function resolveVacancyFromImage(vacancies) {
-  const withImage = vacancies.filter((v) => v.imageData);
-  if (withImage.length === 1) {
-    return { vacancyId: withImage[0].id, confidence: 'low', reasoning: 'single_vacancy_with_image' };
+  const matchingCityVacancies = city
+    ? vacancies.filter((vacancy) => normalizeResolverText(canonicalVacancyCity(vacancy)) === normalizeResolverText(city))
+    : vacancies;
+
+  if (city && !matchingCityVacancies.length) {
+    return { resolved: false, vacancy: null, city, roleHint, reason: 'city_without_active_vacancies' };
   }
-  return { vacancyId: null, confidence: 'none', reasoning: 'multiple_or_no_image_vacancies' };
+
+  const scored = matchingCityVacancies
+    .map((vacancy) => ({ vacancy, score: scoreVacancy(vacancy, { text, city, roleHint }) }))
+    .sort((a, b) => b.score - a.score);
+
+  const best = scored[0];
+  const runnerUp = scored[1];
+  const hasUniqueCityMatch = Boolean(city && matchingCityVacancies.length === 1 && hasInterestSignal(text));
+  const threshold = roleHint ? 4.5 : hasUniqueCityMatch ? 4 : 6;
+  const margin = runnerUp ? best.score - runnerUp.score : best.score;
+
+  if (!best || best.score < threshold) {
+    return { resolved: false, vacancy: null, city, roleHint, reason: 'low_confidence_match' };
+  }
+
+  if (runnerUp && margin < 0.75) {
+    return { resolved: false, vacancy: null, city, roleHint, reason: 'ambiguous_match' };
+  }
+
+  return {
+    resolved: true,
+    vacancy: best.vacancy,
+    city: city || canonicalVacancyCity(best.vacancy),
+    roleHint,
+    reason: 'matched_active_vacancy'
+  };
 }

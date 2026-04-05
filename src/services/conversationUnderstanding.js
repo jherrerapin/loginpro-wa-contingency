@@ -1,4 +1,5 @@
 import { normalizeCandidateFields, parseNaturalData } from './candidateData.js';
+import { detectRoleHintFromText } from './vacancyResolver.js';
 
 const EMPTY_UNDERSTANDING = Object.freeze({
   intent: 'unknown',
@@ -44,13 +45,39 @@ function findTransportContradiction(candidateFields = {}) {
 export async function conversationUnderstanding(text, options = {}) {
   const input = String(text || '');
   const understanding = baseUnderstanding();
+  const aiFields = options.aiResult?.parsedFields || {};
 
   const localParsed = parseNaturalData(input);
   const normalized = normalizeCandidateFields(localParsed);
+  const aiCity = typeof aiFields.city === 'string' ? aiFields.city.trim() || null : null;
+  const aiRoleHint = typeof aiFields.roleHint === 'string' ? aiFields.roleHint.trim() || null : null;
+  const localRoleHint = detectRoleHintFromText(input);
 
   understanding.candidateFields = normalized;
   understanding.intent = Object.keys(normalized).length ? 'provide_data' : 'unknown';
   understanding.suggestedNextAction = Object.keys(normalized).length ? 'collect_or_confirm' : 'ask_for_clarification';
+
+  if (aiCity) {
+    understanding.cityDetection = { detected: true, value: aiCity, confidence: 0.85 };
+  }
+
+  if (aiRoleHint || localRoleHint) {
+    const value = aiRoleHint || localRoleHint;
+    understanding.vacancyDetection = {
+      detected: true,
+      value,
+      confidence: aiRoleHint ? 0.85 : 0.6
+    };
+  }
+
+  if (
+    understanding.intent === 'unknown'
+    && (understanding.cityDetection.detected || understanding.vacancyDetection.detected)
+    && /\b(vacante|cargo|empleo|trabajo|interes|aplicar|postular|continuar)\b/i.test(input)
+  ) {
+    understanding.intent = 'apply_intent';
+    understanding.suggestedNextAction = 'resolve_vacancy';
+  }
 
   if (detectCorrectionIntent(input)) {
     understanding.intent = 'provide_correction';

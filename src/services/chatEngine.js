@@ -31,10 +31,17 @@ export async function runChatEngine({
   await act({
     actions: result.actions,
     candidate,
+    extractedFields: result.extractedFields,
     nextStep: result.nextStep,
     nextSlot,
     prisma,
   });
 
-  return result.reply;
+  return {
+    reply: result.reply,
+    actions: result.actions,
+    nextStep: result.nextStep,
+    extractedFields: result.extractedFields,
+    fallback: result.fallback,
+  };
 }

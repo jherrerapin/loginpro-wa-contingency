@@ -26,6 +26,8 @@ Campos que puedes extraer (omite los que no estén presentes o no sean claros):
 
 {
   "intent": string,           // Intención principal del mensaje
+  "city": string,             // Ciudad desde donde escribe o donde quiere aplicar
+  "roleHint": string,         // Cargo o vacante de interés, expresado de forma breve
   "fullName": string,         // Nombre completo — capitalizado correctamente
   "documentType": string,     // CC | TI | CE | PPT | Pasaporte
   "documentNumber": string,   // Solo los dígitos
@@ -62,6 +64,9 @@ Cómo pensar sobre los datos (no son reglas, son criterios de sentido común):
 
 • El transporte puede ser implícito: "tengo moto", "me muevo en bici",
   "no tengo cómo llegar", "sin vehículo". Tú entiendes si tiene o no tiene.
+
+• Si el candidato menciona una ciudad o un cargo de interés, extráelos en "city"
+  y "roleHint" solo cuando estén razonablemente claros.
 
 • Si algo no está claro en el mensaje, simplemente no lo incluyas en el JSON.
   Prefiere omitir a inventar.`;

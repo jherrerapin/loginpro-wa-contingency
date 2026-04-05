@@ -74,12 +74,13 @@ function buildVacancyContext(vacancy) {
   const schedulingLine = vacancy.schedulingEnabled
     ? 'Agendamiento de entrevistas: habilitado'
     : 'Agendamiento de entrevistas: NO habilitado. Esta vacante es de solo postulación — NO se agenda entrevista.';
+  const addressLabel = vacancy.schedulingEnabled ? 'Dirección de entrevista' : 'Dirección de operación';
 
   return [
     `Vacante: ${vacancy.title || vacancy.role}`,
     `Cargo: ${vacancy.role}`,
     `Ciudad: ${vacancy.city}`,
-    vacancy.operationAddress  && `Dirección de operación: ${vacancy.operationAddress}`,
+    vacancy.operationAddress  && `${addressLabel}: ${vacancy.operationAddress}`,
     `Requisitos: ${vacancy.requirements}`,
     `Condiciones: ${vacancy.conditions}`,
     vacancy.requiredDocuments && `Documentación para entrevista: ${vacancy.requiredDocuments}`,
@@ -97,10 +98,16 @@ function buildConversationHistory(recentMessages) {
 
 function buildNextSlotContext(nextSlot) {
   if (!nextSlot?.slot) return '';
+  const label = nextSlot.isConfirmedBooking
+    ? 'Entrevista ya agendada'
+    : (nextSlot.isAlternative ? 'Siguiente slot de entrevista disponible' : 'Slot de entrevista disponible');
   const warning = !nextSlot.windowOk && nextSlot.windowExtension?.needsWindowExtension
     ? ' (fuera de ventana 24h de WhatsApp — se programará re-enganche automático)'
     : '';
-  return `\nPróximo slot de entrevista disponible: ${nextSlot.formattedDate}${warning}`;
+  const previousOfferLine = nextSlot.previousFormattedDate
+    ? `\nHorario anterior rechazado: ${nextSlot.previousFormattedDate}`
+    : '';
+  return `${previousOfferLine}\n${label}: ${nextSlot.formattedDate}${warning}`;
 }
 
 // ─────────────────────────────────────────────
@@ -194,6 +201,39 @@ CASO B — El candidato corrige un dato (dice "no tengo restricción", "mi edad 
   → El campo "restricciones médicas" debe mostrar exactamente lo que el candidato dijo.`;
 }
 
+function buildSchedulingStepInstructions(currentStep, candidate, vacancy, nextSlot) {
+  if (!vacancy?.schedulingEnabled) return '';
+  if (candidate.gender === 'FEMALE') {
+    return `
+INSTRUCCIÓN CRÍTICA DE AGENDA:
+Aunque la vacante tenga agenda habilitada, una candidata femenina NO debe pasar por agendamiento automático.
+Si ya tiene datos + hoja de vida, cerrá con "mark_female_pipeline".`;
+  }
+
+  if (!['ASK_CV', 'SCHEDULING', 'SCHEDULED', 'CONFIRMING_DATA', 'COLLECTING_DATA'].includes(currentStep)) {
+    return '';
+  }
+
+  const slotInstruction = nextSlot?.isConfirmedBooking
+    ? `La entrevista ya está agendada para ${nextSlot.formattedDate}.`
+    : (nextSlot?.slot
+      ? `Tienes disponible este horario para usar en la conversación: ${nextSlot.formattedDate}.`
+      : 'En este momento NO hay un horario válido disponible.');
+
+  const actionInstruction = nextSlot?.isConfirmedBooking
+    ? '- Si el candidato pide cambiar la entrevista o dice que no puede asistir, usa "reschedule" solo si existe un siguiente slot válido.'
+    : '- Si ya están completos los datos y la hoja de vida, y existe un horario válido, usa la acción "offer_interview" y continúa en SCHEDULING.';
+
+  return `
+INSTRUCCIONES CRÍTICAS DE AGENDA:
+${slotInstruction}
+${actionInstruction}
+- Si el candidato confirma el horario ofrecido, usa "confirm_booking".
+- Si el candidato indica que no puede asistir o pide otro horario, usa "reschedule" SOLO si existe un siguiente slot válido.
+- Si no hay slot válido para ofrecer o reagendar, usa "pause_bot" con una razón clara.
+- Si la vacante es solo postulación, nunca menciones entrevistas.`;
+}
+
 // ─────────────────────────────────────────────
 // System prompt
 // ─────────────────────────────────────────────
@@ -227,6 +267,7 @@ ${cvPending ? '\nEstá pendiente que el candidato envíe su hoja de vida.' : ''}
 ${buildNextSlotContext(nextSlot)}
 
 ${buildGenderFlowInstruction(candidate, vacancy)}
+${buildSchedulingStepInstructions(currentStep, candidate, vacancy, nextSlot)}
 
 PASO ACTUAL DEL FLUJO: ${currentStep}
 ${buildConfirmationStepInstructions(currentStep)}
@@ -244,7 +285,7 @@ Leé el último mensaje del candidato, entendé qué quiso decir, y devolvé SOL
   "extractedFields": object
 }
 
-nextStep válidos: MENU | GREETING_SENT | COLLECTING_DATA | CONFIRMING_DATA | ASK_CV | DONE | SCHEDULING | SCHEDULED | FEMALE_PIPELINE_DONE
+nextStep válidos: MENU | GREETING_SENT | COLLECTING_DATA | CONFIRMING_DATA | ASK_CV | DONE | SCHEDULING | SCHEDULED
 
 ACCIONES DISPONIBLES:
 - "save_fields"           — guardar campos del candidato. data: { ...campos }
@@ -252,7 +293,7 @@ ACCIONES DISPONIBLES:
 - "mark_rejected"         — no cumple requisitos. data: { reason, details }
 - "offer_interview"       — ofrecer horario (SOLO MALE u OTHER con schedulingEnabled=true)
 - "confirm_booking"       — candidato aceptó el horario
-- "reschedule"            — candidato rechazó el horario, ofrecer el siguiente
+- "reschedule"            — candidato rechazó el horario, ofrecer el siguiente; si no hay siguiente slot, usa pause_bot
 - "request_cv"            — pedir hoja de vida
 - "mark_female_pipeline"  — candidata femenina completa: datos + CV listos, pasa a cola humana
 - "mark_no_interest"      — candidato expresó que no quiere continuar
@@ -264,7 +305,9 @@ CRITERIOS DE RECHAZO:
 - Documento vencido o inexistente (candidato lo menciona explícitamente)
 - Extranjero sin CE, PPT o Pasaporte
 
-Si el candidato da datos, extraélos en extractedFields e incluí save_fields en actions.
+Si el candidato da datos, extraélos en extractedFields aunque no todos vayan dentro de save_fields; el sistema también persistirá extractedFields.
+Si el candidato hace una pregunta sobre la vacante, respóndela primero usando el contexto real y luego continúa el flujo sin repetir frases quemadas.
+Si ya hay datos capturados en el historial, consolídalos con lo nuevo y pide solo lo realmente faltante.
 Decidí si hay suficientes datos para pedir confirmación, o si aún faltan campos importantes.
 En ese caso, pedílos de forma natural — nunca como un formulario.
 
@@ -307,6 +350,21 @@ function parseEngineJson(rawText = '{}') {
   const objMatch = t.match(/\{[\s\S]*\}/);
   if (objMatch) { try { return JSON.parse(objMatch[0]); } catch { /* fall */ } }
   return null;
+}
+
+function mergeEngineFields(actions = [], extractedFields = {}) {
+  const merged = { ...(extractedFields || {}) };
+  for (const action of actions || []) {
+    if (action?.type !== 'save_fields' || typeof action?.data !== 'object' || !action.data) continue;
+    Object.assign(merged, action.data);
+  }
+  return merged;
+}
+
+function mapEngineGender(rawGender, Gender) {
+  if (!rawGender) return null;
+  const gMap = { MALE: Gender.MALE, FEMALE: Gender.FEMALE, OTHER: Gender.OTHER };
+  return gMap[String(rawGender).toUpperCase()] || null;
 }
 
 // ─────────────────────────────────────────────
@@ -390,102 +448,130 @@ export async function think({ inboundText, candidate, vacancy, recentMessages = 
  * @param {object|null}      p.nextSlot
  * @param {PrismaClient}     p.prisma
  */
-export async function act({ actions, candidate, nextStep, nextSlot, prisma }) {
+export async function act({ actions, candidate, extractedFields = {}, nextStep, nextSlot, prisma }) {
   const { normalizeCandidateFields }  = await import('./candidateData.js');
-  const { createBooking }             = await import('./interviewScheduler.js');
+  const { cancelCandidateBookings, createBooking } = await import('./interviewScheduler.js');
   const { CandidateStatus, ConversationStep, Gender } = await import('@prisma/client');
+  const normalizedActions = Array.isArray(actions) ? actions : [];
+  const mergedRawFields = mergeEngineFields(normalizedActions, extractedFields);
+  const mergedFields = normalizeCandidateFields(mergedRawFields);
+  const mappedGender = mapEngineGender(mergedRawFields.gender, Gender);
+  if (mappedGender) mergedFields.gender = mappedGender;
 
-  for (const action of actions) {
+  if (Object.keys(mergedFields).length) {
+    await prisma.candidate.update({ where: { id: candidate.id }, data: mergedFields })
+      .catch((err) => console.error('[ACT_FIELDS_ERROR]', { error: err?.message?.slice(0, 200) }));
+  }
+
+  const pendingUpdate = {};
+  let terminalStep = null;
+  let requestedStep = null;
+  const setStep = (step, options = {}) => {
+    if (!step) return;
+    if (options.terminal) {
+      terminalStep = step;
+      return;
+    }
+    if (!terminalStep) requestedStep = step;
+  };
+
+  for (const action of normalizedActions) {
     try {
       switch (action.type) {
 
-        case 'save_fields': {
-          const raw    = action.data || {};
-          const fields = normalizeCandidateFields(raw);
-
-          if (raw.gender) {
-            const gMap = { MALE: Gender.MALE, FEMALE: Gender.FEMALE, OTHER: Gender.OTHER };
-            const normalized = gMap[String(raw.gender).toUpperCase()];
-            if (normalized) fields.gender = normalized;
-          }
-
-          if (Object.keys(fields).length) {
-            await prisma.candidate.update({ where: { id: candidate.id }, data: fields });
-          }
+        case 'save_fields':
           break;
-        }
+
+        case 'request_cv':
+          setStep(ConversationStep.ASK_CV);
+          break;
+
+        case 'request_confirmation':
+          setStep(ConversationStep.CONFIRMING_DATA);
+          break;
 
         case 'mark_female_pipeline': {
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: {
-              gender:          Gender.FEMALE,
-              status:          CandidateStatus.REGISTRADO,
-              currentStep:     ConversationStep.DONE,
-              botPaused:       true,
-              botPausedAt:     new Date(),
-              botPauseReason:  'Candidata femenina — pendiente revisión humana de hoja de vida',
-              reminderScheduledFor: null,
-              reminderState:   'SKIPPED'
-            }
-          });
+          pendingUpdate.gender = Gender.FEMALE;
+          pendingUpdate.status = CandidateStatus.REGISTRADO;
+          pendingUpdate.botPaused = true;
+          pendingUpdate.botPausedAt = new Date();
+          pendingUpdate.botPauseReason = 'Candidata femenina — pendiente revisión humana de hoja de vida';
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'SKIPPED';
+          setStep(ConversationStep.DONE, { terminal: true });
           console.info('[FEMALE_PIPELINE]', { phone: candidate.phone, candidateId: candidate.id });
           break;
         }
 
         case 'mark_rejected': {
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: {
-              status:           CandidateStatus.RECHAZADO,
-              currentStep:      ConversationStep.DONE,
-              rejectionReason:  action.data?.reason  || 'No cumple requisitos',
-              rejectionDetails: action.data?.details || null,
-              reminderScheduledFor: null,
-              reminderState:    'SKIPPED'
-            }
-          });
+          pendingUpdate.status = CandidateStatus.RECHAZADO;
+          pendingUpdate.rejectionReason = action.data?.reason || 'No cumple requisitos';
+          pendingUpdate.rejectionDetails = action.data?.details || null;
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'SKIPPED';
+          setStep(ConversationStep.DONE, { terminal: true });
           break;
         }
 
         case 'confirm_booking': {
-          if (!nextSlot?.slot || !candidate.vacancyId) break;
+          if (!nextSlot?.slot || !candidate.vacancyId) {
+            console.warn('[ACT_SKIPPED]', { action: action.type, reason: 'missing_slot_or_vacancy' });
+            break;
+          }
+          await cancelCandidateBookings(
+            prisma,
+            candidate.id,
+            candidate.currentStep === ConversationStep.SCHEDULED ? 'RESCHEDULED' : 'CANCELLED'
+          );
           await createBooking(
             prisma, candidate.id, candidate.vacancyId,
             nextSlot.slot.id, nextSlot.date, !nextSlot.windowOk
           );
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data:  { currentStep: ConversationStep.SCHEDULED }
-          });
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'SKIPPED';
+          setStep(ConversationStep.SCHEDULED, { terminal: true });
           break;
         }
 
         case 'mark_no_interest': {
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data:  {
-              currentStep: ConversationStep.DONE,
-              reminderScheduledFor: null,
-              reminderState: 'SKIPPED'
-            }
-          });
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'SKIPPED';
+          setStep(ConversationStep.DONE, { terminal: true });
           break;
         }
 
         case 'pause_bot': {
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: {
-              botPaused:      true,
-              botPausedAt:    new Date(),
-              botPauseReason: action.data?.reason || 'Requiere atención humana'
-            }
-          });
+          pendingUpdate.botPaused = true;
+          pendingUpdate.botPausedAt = new Date();
+          pendingUpdate.botPauseReason = action.data?.reason || 'Requiere atención humana';
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'CANCELLED';
           break;
         }
 
+        case 'offer_interview':
+        case 'reschedule':
+          if (!nextSlot?.slot) {
+            pendingUpdate.botPaused = true;
+            pendingUpdate.botPausedAt = new Date();
+            pendingUpdate.botPauseReason = action.type === 'reschedule'
+              ? 'No hay un siguiente slot valido para reagendar'
+              : 'Vacante con agenda habilitada sin slots validos disponibles';
+            pendingUpdate.reminderScheduledFor = null;
+            pendingUpdate.reminderState = 'CANCELLED';
+            break;
+          }
+          pendingUpdate.reminderScheduledFor = null;
+          pendingUpdate.reminderState = 'SKIPPED';
+          setStep(ConversationStep.SCHEDULING);
+          break;
+
+        case 'nothing':
+          console.info('[ACT_NOOP]', { action: action.type, candidateId: candidate.id });
+          break;
+
         default:
+          console.warn('[ACT_UNHANDLED]', { action: action?.type || 'unknown', candidateId: candidate.id });
           break;
       }
     } catch (err) {
@@ -494,10 +580,18 @@ export async function act({ actions, candidate, nextStep, nextSlot, prisma }) {
   }
 
   const validSteps = Object.values(ConversationStep);
-  if (nextStep && validSteps.includes(nextStep) && nextStep !== candidate.currentStep) {
+  const finalStep = terminalStep
+    || requestedStep
+    || (nextStep && validSteps.includes(nextStep) ? nextStep : null);
+
+  if (finalStep && finalStep !== candidate.currentStep) {
+    pendingUpdate.currentStep = finalStep;
+  }
+
+  if (Object.keys(pendingUpdate).length) {
     await prisma.candidate.update({
       where: { id: candidate.id },
-      data:  { currentStep: nextStep }
+      data: pendingUpdate
     }).catch((e) => console.error('[ACT_STEP_UPDATE_ERROR]', e?.message));
   }
 }
