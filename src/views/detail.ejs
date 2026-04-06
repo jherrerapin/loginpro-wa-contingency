@@ -108,9 +108,7 @@
     </div>
     <% const uiStatus = normalizeCandidateStatusForUI(candidate.status); %>
     <% const detailReturnTo = '/admin/candidates/' + candidate.id; %>
-    <% const whatsappHref = role === 'dev'
-      ? '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(detailReturnTo)
-      : 'https://wa.me/' + candidate.phone; %>
+    <% const whatsappHref = '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(detailReturnTo); %>
     <% const bookingStatusLabel = {
       SCHEDULED:   { cls: 'booking-status-scheduled', text: 'Agendada' },
       CONFIRMED:   { cls: 'booking-status-confirmed', text: 'Confirmada' },
