@@ -12,6 +12,7 @@ import { detectConversationIntent, isPostCompletionAck } from '../services/conve
 import { conversationUnderstanding } from '../services/conversationUnderstanding.js';
 import { shouldBlockAutomation } from '../services/botAutomationPolicy.js';
 import { runChatEngine } from '../services/chatEngine.js';
+import { think, extractEngineCandidateFields } from '../services/conversationEngine.js';
 import { normalizeResolverText, resolveVacancyFromText } from '../services/vacancyResolver.js';
 import { cancelCandidateBookings, createBooking, formatInterviewDate, getNextAvailableSlot, getNextAvailableSlotAfter, getInterviewReminderAt, hydrateOfferedSlot } from '../services/interviewScheduler.js';
 import { generateBookingConfirmation, generateInterviewOffer } from '../services/naturalReply.js';
@@ -151,7 +152,12 @@ function formatFieldList(fields = []) {
   if (labels.length === 2) return `${labels[0]} y ${labels[1]}`;
   return `${labels.slice(0, -1).join(', ')} y ${labels[labels.length - 1]}`;
 }
-function containsCandidateData(text) { return Object.keys(parseNaturalData(text)).length > 0; }
+function containsCandidateData(text, parsedData = null) {
+  const candidateData = parsedData && typeof parsedData === 'object'
+    ? parsedData
+    : parseNaturalData(text);
+  return Object.keys(candidateData || {}).length > 0;
+}
 function hasHv(candidate) { return Boolean(candidate?.cvData); }
 function resolveInboundMessageType(message = {}) {
   if (message.type === 'text') return MessageType.TEXT;
@@ -232,6 +238,13 @@ function buildUpdatedConfirmationReply(candidate, updatedFields = []) {
     ? `Para seguir me faltan: ${missing.join(', ')}.`
     : 'Si todo está bien, seguimos con el siguiente paso.';
   return buildConfirmationSummary(candidate, { intro, prompt });
+}
+function buildConfirmationClarifier(candidate) {
+  const missing = getMissingFields(candidate);
+  if (missing.length) {
+    return `Si ves algo por ajustar, envíame solo el dato correcto. Para seguir todavía necesito: ${missing.join(', ')}.`;
+  }
+  return 'Si todo está correcto, responde sí y seguimos. Si quieres ajustar algo, envíame solo ese dato y lo actualizo.';
 }
 function buildQuestionFollowUpReply(vacancy, inboundText = '', followUpText = '') {
   const answer = buildVacancyQuestionLead(vacancy, inboundText);
@@ -487,6 +500,21 @@ function inferNaturalOverwriteFields(text, normalizedData = {}, current = {}, cu
   return [...allow];
 }
 
+function mergeFieldSource(sourceByField, field, source) {
+  if (!field || !source) return;
+  sourceByField[field] = sourceByField[field] ? 'merged' : source;
+}
+
+function shouldUseEngineFieldPreview(candidate, cleanText, localParsedData = {}, aiFields = {}) {
+  if (!USE_CONVERSATION_ENGINE) return false;
+  if (!candidate || !cleanText) return false;
+  if (![ConversationStep.CONFIRMING_DATA, ConversationStep.COLLECTING_DATA, ConversationStep.ASK_CV].includes(candidate.currentStep)) {
+    return false;
+  }
+  if (candidate.currentStep === ConversationStep.CONFIRMING_DATA) return true;
+  return Object.keys(aiFields || {}).length === 0 || Object.keys(localParsedData || {}).length <= 1;
+}
+
 async function buildEngineContext(prisma, candidate, inboundText = '', providedVacancy = null) {
   const vacancy = providedVacancy || (candidate.vacancyId
     ? await loadVacancyContext(prisma, candidate.vacancyId)
@@ -508,6 +536,21 @@ async function buildEngineContext(prisma, candidate, inboundText = '', providedV
     : null;
 
   return { vacancy, recentMessages, nextSlot };
+}
+
+async function previewEngineCandidateFields(prisma, candidate, inboundText, providedVacancy = null) {
+  const { vacancy, recentMessages, nextSlot } = await buildEngineContext(prisma, candidate, inboundText, providedVacancy);
+  const preview = await think({
+    inboundText,
+    candidate,
+    vacancy,
+    recentMessages,
+    nextSlot,
+    currentStep: candidate.currentStep || ConversationStep.MENU,
+  });
+
+  if (preview?.fallback) return {};
+  return extractEngineCandidateFields(preview.actions, preview.extractedFields);
 }
 
 async function replyWithEngine(prisma, candidate, from, inboundText, providedVacancy = null) {
@@ -662,17 +705,23 @@ async function rejectCandidate(prisma, candidateId, from, rejection = {}) {
 
 async function processText(prisma, candidate, from, text, debugTrace, options = {}) {
   const cleanText = normalizeText(text);
-  const hasDataIntent = containsCandidateData(cleanText);
   const fallbackIntent = detectConversationIntent(cleanText, { isDoneStep: candidate.currentStep === ConversationStep.DONE });
   debugTrace.openai_intent = inferIntent(cleanText);
   debugTrace.batched_message_count = options.batchedMessageCount || 1;
   debugTrace.used_multiline_context = Boolean(options.usedMultilineContext);
   debugTrace.consolidated_input_summary = options.consolidatedInputSummary || null;
+  const currentVacancy = candidate.vacancyId ? await loadVacancyContext(prisma, candidate.vacancyId) : null;
 
   const aiResult = await tryOpenAIParse(cleanText);
   const understanding = await conversationUnderstanding(cleanText, { aiResult });
   const localParsedData = parseNaturalData(cleanText);
   const aiFields = aiResult.parsedFields || {};
+  const rawEngineFields = shouldUseEngineFieldPreview(candidate, cleanText, localParsedData, aiFields)
+    ? await previewEngineCandidateFields(prisma, candidate, cleanText, currentVacancy)
+    : {};
+  const engineFields = rawEngineFields && typeof rawEngineFields === 'object'
+    ? normalizeCandidateFields(rawEngineFields)
+    : {};
   const sourceByField = {};
   const mergedData = {};
 
@@ -680,17 +729,23 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     if (value === undefined || value === null || value === '') continue;
     if (isHighConfidenceLocalField(field, value)) {
       mergedData[field] = value;
-      sourceByField[field] = 'local';
+      mergeFieldSource(sourceByField, field, 'local');
     }
   }
   for (const [field, value] of Object.entries(aiFields)) {
     if (value === undefined || value === null || value === '') continue;
     mergedData[field] = value;
-    sourceByField[field] = sourceByField[field] ? 'merged' : 'openai';
+    mergeFieldSource(sourceByField, field, 'openai');
+  }
+  for (const [field, value] of Object.entries(engineFields)) {
+    if (value === undefined || value === null || value === '') continue;
+    mergedData[field] = value;
+    mergeFieldSource(sourceByField, field, 'engine');
   }
   const normalizedData = normalizeCandidateFields(mergedData);
+  const hasDataIntent = containsCandidateData(cleanText, normalizedData);
 
-  debugTrace.openai_used = aiResult.used;
+  debugTrace.openai_used = aiResult.used || Object.keys(engineFields).length > 0;
   debugTrace.openai_status = aiResult.status === 'error' ? 'fallback' : aiResult.status;
   debugTrace.openai_model = aiResult.model || debugTrace.openai_model;
   debugTrace.openai_temperature_omitted = typeof aiResult.temperature_omitted === 'boolean'
@@ -702,7 +757,10 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     roleHint: aiFields.roleHint || understanding.vacancyDetection?.value || null,
   };
   if (resolvedIntent) debugTrace.openai_intent = resolvedIntent;
-  debugTrace.openai_detected_fields = Object.keys(aiFields).filter((k) => normalizedData[k] !== undefined);
+  debugTrace.openai_detected_fields = [...new Set([
+    ...Object.keys(aiFields).filter((k) => normalizedData[k] !== undefined),
+    ...Object.keys(engineFields).filter((k) => normalizedData[k] !== undefined),
+  ])];
   debugTrace.source_by_field = sourceByField;
   debugTrace.normalized_fields = normalizedData;
   debugTrace.vacancy_hint_city = vacancyHints.city;
@@ -785,7 +843,6 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
     return reply(prisma, candidate.id, from, SALUDO_INICIAL, cleanText, { body: SALUDO_INICIAL, source: 'bot_vacancy_prompt' });
   }
 
-  const currentVacancy = candidate.vacancyId ? await loadVacancyContext(prisma, candidate.vacancyId) : null;
   const askedVacancyQuestion = Boolean(currentVacancy && isQuestionLike(cleanText));
 
   if (resolvedIntent === 'faq' || isFAQ(cleanText)) {
@@ -876,7 +933,7 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
 
   const applyDecisionsAndUpdate = async () => {
     const current = await prisma.candidate.findUnique({ where: { id: candidate.id } });
-    const explicitCorrection = /\b(corrijo|correccion|quise decir|actualizo|de hecho|mejor|perd[oó]n)\b/i.test(cleanText);
+    const explicitCorrection = /\b(corrijo|correccion|corrección|quise decir|actualizo|de hecho|mejor|perd[oó]n|en realidad|más bien|mas bien)\b/i.test(cleanText);
     const allowOverwriteFields = inferNaturalOverwriteFields(cleanText, normalizedData, current, candidate.currentStep);
     if (explicitCorrection) {
       Object.keys(normalizedData).forEach((field) => {
@@ -947,7 +1004,11 @@ async function processText(prisma, candidate, from, text, debugTrace, options = 
       return reply(prisma, candidate.id, from, 'Gracias por avisar. Indícame por favor el dato que deseas corregir y lo actualizo.');
     }
     const latest = await prisma.candidate.findUnique({ where: { id: candidate.id } });
-    return reply(prisma, candidate.id, from, buildConfirmationSummary(latest));
+    const followUp = buildConfirmationClarifier(latest);
+    const body = askedVacancyQuestion
+      ? buildQuestionFollowUpReply(currentVacancy, cleanText, followUp)
+      : followUp;
+    return reply(prisma, candidate.id, from, body, cleanText, { body, source: 'bot_flow' });
   }
 
   if (candidate.currentStep === ConversationStep.GREETING_SENT) {

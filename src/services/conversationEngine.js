@@ -362,6 +362,10 @@ function mergeEngineFields(actions = [], extractedFields = {}) {
   return merged;
 }
 
+export function extractEngineCandidateFields(actions = [], extractedFields = {}) {
+  return mergeEngineFields(actions, extractedFields);
+}
+
 function mapEngineGender(rawGender, Gender) {
   if (!rawGender) return null;
   const gMap = { MALE: Gender.MALE, FEMALE: Gender.FEMALE, OTHER: Gender.OTHER };
@@ -454,13 +458,14 @@ export async function act({ actions, candidate, extractedFields = {}, nextStep, 
   const { cancelCandidateBookings, createBooking } = await import('./interviewScheduler.js');
   const { CandidateStatus, ConversationStep, Gender } = await import('@prisma/client');
   const normalizedActions = Array.isArray(actions) ? actions : [];
-  const mergedRawFields = mergeEngineFields(normalizedActions, extractedFields);
+  const mergedRawFields = extractEngineCandidateFields(normalizedActions, extractedFields);
   const mergedFields = normalizeCandidateFields(mergedRawFields);
   const mappedGender = mapEngineGender(mergedRawFields.gender, Gender);
   if (mappedGender) mergedFields.gender = mappedGender;
   const candidateAfterMerge = { ...candidate, ...mergedFields };
   const missingFieldsAfterMerge = getMissingFields(candidateAfterMerge);
   const hasNewRequiredData = Object.keys(mergedFields).some((field) => REQUIRED_FIELDS.includes(field));
+  const hasCvAfterMerge = Boolean(candidateAfterMerge.cvData || candidateAfterMerge.cvOriginalName || candidateAfterMerge.cvMimeType);
 
   if (Object.keys(mergedFields).length) {
     await prisma.candidate.update({ where: { id: candidate.id }, data: mergedFields })
@@ -499,7 +504,13 @@ export async function act({ actions, candidate, extractedFields = {}, nextStep, 
           if (candidate.currentStep === ConversationStep.CONFIRMING_DATA && hasNewRequiredData) {
             if (missingFieldsAfterMerge.length) {
               setStep(ConversationStep.COLLECTING_DATA);
+            } else if (!hasCvAfterMerge) {
+              setStep(ConversationStep.ASK_CV);
             }
+            break;
+          }
+          if (candidate.currentStep === ConversationStep.CONFIRMING_DATA && !missingFieldsAfterMerge.length && !hasCvAfterMerge) {
+            setStep(ConversationStep.ASK_CV);
             break;
           }
           setStep(ConversationStep.CONFIRMING_DATA);

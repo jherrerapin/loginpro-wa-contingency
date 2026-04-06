@@ -68,19 +68,20 @@ function normalizeDocumentType(value = '') {
 
 function detectTransportKeyword(text = '') {
   const n = normalizeLooseText(text);
-  if (!n) return null;
-  if (BIKE_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`, 'i').test(n))) return 'Bicicleta';
-  if (MOTO_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`, 'i').test(n))) return 'Moto';
+  const compact = n.replace(/[.,;:]/g, ' ');
+  if (!compact) return null;
+  if (BIKE_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`, 'i').test(compact))) return 'Bicicleta';
+  if (MOTO_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`, 'i').test(compact))) return 'Moto';
   return null;
 }
 
 function detectContextualAge(text = '') {
-  const compact = String(text || '').replace(/\s+/g, ' ').trim();
+  const compact = normalizeLooseText(text);
   if (!compact) return null;
 
-  const explicit = compact.match(/\b(?:mi\s+edad\s+es|edad\s*(?:es|:)?|tengo|soy\s+de)\s*(\d{1,2})\s*a(?:n|ñ)os\b(?!\s+de\s+experiencia)/i);
+  const explicit = compact.match(/\b(?:mi\s+edad\s+es|edad\s*(?:es|:)?|tengo|soy\s+de)\s*(\d{1,2})\s*anos(?:\s+de\s+edad)?\b(?!\s+de\s+experiencia)/i);
   const fallback = !/experien/i.test(compact)
-    ? compact.match(/^\D*(\d{1,2})\s*a(?:n|ñ)os\b(?!\s+de\s+experiencia)\D*$/i)
+    ? compact.match(/^\D*(\d{1,2})\s*anos(?:\s+de\s+edad)?\b(?!\s+de\s+experiencia)\D*$/i)
     : null;
   const rawAge = explicit?.[1] || fallback?.[1];
   if (!rawAge) return null;
@@ -141,7 +142,7 @@ function normalizeTransportMode(value = '') {
   }
   const directDetected = detectTransportKeyword(n);
   if (directDetected) return directDetected;
-  if (['motocicleta propia'].includes(n)) return 'Moto';
+  if (['motocicleta propia', 'moto propia'].includes(n)) return 'Moto';
   return capitalizeWords(n);
 }
 

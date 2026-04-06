@@ -1,5 +1,5 @@
 import { ConversationStep } from '@prisma/client';
-import { think, act } from './conversationEngine.js';
+import { think, act, extractEngineCandidateFields } from './conversationEngine.js';
 
 /**
  * chatEngine.js
@@ -32,6 +32,7 @@ export async function runChatEngine({
   const extractedFields = result.extractedFields && typeof result.extractedFields === 'object'
     ? result.extractedFields
     : {};
+  const candidateFields = extractEngineCandidateFields(actions, extractedFields);
 
   await act({
     actions,
@@ -47,6 +48,7 @@ export async function runChatEngine({
     actions,
     nextStep: result.nextStep,
     extractedFields,
+    candidateFields,
     fallback: result.fallback,
   };
 }

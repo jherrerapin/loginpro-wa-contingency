@@ -184,6 +184,7 @@ export function splitFieldDecisions(parsedData = {}, candidate = {}, options = {
   for (const field of CANDIDATE_FIELDS) {
     const value = parsedData[field];
     if (value === undefined || value === null || value === '') continue;
+    const fieldSource = sourceByField[field] || 'unknown';
 
     if (field === 'fullName' && isSuspiciousFullName(value)) {
       decisions.rejectedFields.push('fullName');
@@ -192,7 +193,12 @@ export function splitFieldDecisions(parsedData = {}, candidate = {}, options = {
       continue;
     }
 
-    if (field === 'experienceTime' && String(value).trim().length < 2 && String(value).trim() !== '0') {
+    const trimmedValue = String(value).trim();
+    const allowShortExperienceTime = field === 'experienceTime'
+      && /^\d+$/.test(trimmedValue)
+      && (allowOverwriteFields.has(field) || ['openai', 'engine', 'merged'].includes(fieldSource));
+
+    if (field === 'experienceTime' && trimmedValue.length < 2 && trimmedValue !== '0' && !allowShortExperienceTime) {
       decisions.ignoredLowConfidenceFields.push('experienceTime');
       continue;
     }
