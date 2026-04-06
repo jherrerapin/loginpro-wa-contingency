@@ -5,7 +5,6 @@ import path from 'node:path';
 import multer from 'multer';
 import { normalizeCandidateFields } from '../services/candidateData.js';
 import {
-  buildAdminOpenWhatsAppPath,
   buildWhatsAppLink,
   compareCandidatesByRecentInbound,
   candidateHasUnreadInbound,
@@ -110,11 +109,11 @@ const STATUS_LABELS = {
   'APROBADO': 'Registrado', 'RECHAZADO': 'Rechazado', 'CONTACTADO': 'Contactado'
 };
 
-const ADMIN_STATUS_SCOPES = new Set(['registered', 'new', 'contacted', 'rejected', 'all']);
+const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'new', 'contacted', 'rejected', 'all']);
 const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all']);
 
 const STATUS_SCOPE_SUMMARY_LABELS = {
-  registered: 'registrados', new: 'nuevos', contacted: 'contactados',
+  inbox: 'en bandeja', registered: 'registrados', new: 'nuevos', contacted: 'contactados',
   rejected: 'rechazados', all: 'totales'
 };
 const ACTIVE_BOOKING_STATUSES = ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED'];
@@ -250,7 +249,8 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
               botPaused: true, botPauseReason: true,
               currentStep: true,
               lastInboundAt: true,
-              lastOutboundAt: true
+              lastOutboundAt: true,
+              devLastSeenAt: true
             }
           }
         },
@@ -271,6 +271,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
           currentStep: true,
           lastInboundAt: true,
           lastOutboundAt: true,
+          devLastSeenAt: true,
           interviewBookings: {
             where: { status: { in: ACTIVE_BOOKING_STATUSES } },
             select: { id: true }
@@ -297,7 +298,8 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
       gender: true, botPaused: true, botPauseReason: true,
       currentStep: true,
       lastInboundAt: true,
-      lastOutboundAt: true
+      lastOutboundAt: true,
+      devLastSeenAt: true
     }
   });
 
@@ -509,7 +511,11 @@ export function adminRouter(prisma) {
   // ── Dashboard principal ──────────────────────────────────────
   router.get('/', async (req, res) => {
     const requestedStatus = normalizeString(req.query.status);
-    if (requestedStatus && ADMIN_STATUS_SCOPES.has(requestedStatus)) {
+    const canUseLegacyScope = requestedStatus
+      && ADMIN_STATUS_SCOPES.has(requestedStatus)
+      && (req.userRole === 'dev' || requestedStatus !== 'inbox');
+
+    if (canUseLegacyScope) {
       const legacyQuery = {
         orderBy: { createdAt: 'desc' },
         select: {
@@ -536,9 +542,14 @@ export function adminRouter(prisma) {
           botPaused: true,
           botPauseReason: true,
           lastInboundAt: true,
-          lastOutboundAt: true
+          lastOutboundAt: true,
+          devLastSeenAt: true
         }
       };
+      if (requestedStatus === 'inbox' && req.userRole === 'dev') {
+        legacyQuery.where = { lastInboundAt: { not: null } };
+        legacyQuery.orderBy = [{ lastInboundAt: 'desc' }, { createdAt: 'desc' }];
+      }
       if (req.userRole !== 'dev') legacyQuery.take = 200;
 
       const allCandidates = (await prisma.candidate.findMany(legacyQuery))
@@ -610,7 +621,6 @@ export function adminRouter(prisma) {
   // ── Exportar candidatos ──────────────────────────────────────
   router.get('/export', async (req, res) => {
     const scope = normalizeString(req.query.scope) || 'all';
-    const appBaseUrl = `${req.protocol}://${req.get('host')}`;
     if (!EXPORT_SCOPES.has(scope)) return res.status(400).send('Scope inválido.');
 
     const allCandidates = await prisma.candidate.findMany({
@@ -645,8 +655,7 @@ export function adminRouter(prisma) {
     sheet.columns = [
       { header: 'Nombre', key: 'fullName', width: 28 },
       { header: 'Teléfono', key: 'phone', width: 18 },
-      { header: 'Link WhatsApp', key: 'whatsappLink', width: 18 },
-      { header: 'Enviar mensaje', key: 'sendMessageLink', width: 20 },
+      { header: 'WhatsApp', key: 'whatsappLink', width: 20 },
       { header: 'Doc. Tipo', key: 'documentType', width: 12 },
       { header: 'Doc. Número', key: 'documentNumber', width: 18 },
       { header: 'Edad', key: 'age', width: 8 },
@@ -662,20 +671,17 @@ export function adminRouter(prisma) {
     ];
     for (const c of candidates) {
       const whatsappLink = buildWhatsAppLink(c.phone);
-      const sendMessageLink = `${appBaseUrl}${buildAdminOpenWhatsAppPath(c.id)}`;
       const row = sheet.addRow({
         ...c,
         neighborhood: c.neighborhood || c.zone || '',
         locality: c.locality || c.zone || '',
         whatsappLink: whatsappLink ? 'Abrir WhatsApp' : 'Sin número',
-        sendMessageLink: 'Enviar mensaje',
         hasCV: candidateHasCv(c) ? 'Sí' : 'No',
         createdAt: formatDateTimeCO(c.createdAt)
       });
       if (whatsappLink) {
         row.getCell('whatsappLink').value = { text: 'Abrir WhatsApp', hyperlink: whatsappLink };
       }
-      row.getCell('sendMessageLink').value = { text: 'Enviar mensaje', hyperlink: sendMessageLink };
     }
     sheet.autoFilter = {
       from: { row: 1, column: 1 },
@@ -724,7 +730,7 @@ export function adminRouter(prisma) {
       };
       hvCell.font = { bold: true, color: { argb: hvCell.value === 'Sí' ? 'FF166534' : 'FF991B1B' } };
 
-      ['whatsappLink', 'sendMessageLink'].forEach((key) => {
+      ['whatsappLink'].forEach((key) => {
         const linkCell = row.getCell(key);
         linkCell.font = { color: { argb: 'FF1D4ED8' }, underline: true };
       });
@@ -761,6 +767,15 @@ export function adminRouter(prisma) {
       }
     });
     if (!candidate) return res.status(404).send('Candidato no encontrado.');
+
+    if (req.userRole === 'dev') {
+      const seenAt = new Date();
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: { devLastSeenAt: seenAt }
+      });
+      candidate.devLastSeenAt = seenAt;
+    }
 
     const cvSizeBytes = candidate.cvData
       ? normalizeBinaryData(candidate.cvData)?.length || 0
@@ -854,7 +869,7 @@ export function adminRouter(prisma) {
   });
 
   // ── Edición manual ───────────────────────────────────────────
-  router.get('/candidates/:id/open-whatsapp', ensureDevRole, async (req, res) => {
+  router.get('/candidates/:id/open-whatsapp', async (req, res) => {
     const { id } = req.params;
     const returnTo = safeAdminReturnPath(req.query.returnTo || req.get('referer') || '/admin');
     const candidate = await prisma.candidate.findUnique({
@@ -866,15 +881,17 @@ export function adminRouter(prisma) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
 
-    await prisma.candidate.update({
-      where: { id },
-      data: { status: 'CONTACTADO' }
-    });
-
     const whatsappUrl = buildWhatsAppLink(candidate.phone);
     if (!whatsappUrl) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'El candidato no tiene un número válido para WhatsApp.'));
     }
+
+    await prisma.candidate.update({
+      where: { id },
+      data: req.userRole === 'dev'
+        ? { devLastSeenAt: new Date() }
+        : { status: 'CONTACTADO' }
+    });
 
     return res.redirect(whatsappUrl);
   });

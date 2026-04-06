@@ -335,10 +335,7 @@
   const currentAdminReturnPath = isLegacyMode ? currentLegacyPath : currentDashboardPath;
 
   function candidateWhatsappHref(candidate) {
-    if (role === 'dev') {
-      return '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(currentAdminReturnPath);
-    }
-    return 'https://wa.me/' + candidate.phone;
+    return '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(currentAdminReturnPath);
   }
 
   function candidateLastInboundLabel(candidate) {
@@ -369,6 +366,7 @@
 
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
     <% const legacyTabs = [
+      ...(role === 'dev' ? [{ scope: 'inbox', label: 'Inbox' }] : []),
       { scope: 'registered', label: 'Registrados' },
       { scope: 'new',        label: 'Nuevos' },
       { scope: 'contacted',  label: 'Contactados' },
@@ -383,8 +381,8 @@
   <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Mostrando <%= candidates.length %> candidato(s) <%= summaryLabel %></p>
 
   <div class="export-bar" style="border-radius:8px 8px 0 0;border:1px solid var(--border);margin-bottom:-1px;">
-    <a href="/admin/export?scope=registered" class="export-btn">↓ Registrados</a>
-    <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Pendientes HV</a>
+    <a href="/admin/export?scope=registered" class="export-btn">↓ Descargar registrados</a>
+    <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Descargar pendientes HV</a>
     <a href="/admin/export?scope=contacted" class="export-btn">↓ Contactados</a>
     <a href="/admin/export?scope=rejected" class="export-btn">↓ Rechazados</a>
     <a href="/admin/export?scope=all" class="export-btn">↓ Todos</a>
@@ -491,17 +489,6 @@
     if (candidate.medicalRestrictions) parts.push('Restricciones: ' + candidate.medicalRestrictions);
     if (candidate.transportMode) parts.push('Transporte: ' + candidate.transportMode);
     return parts.join(' · ');
-  }
-  function candidateWhatsappHref(candidate) {
-    if (role === 'dev') {
-      return '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(currentDashboardPath);
-    }
-    return 'https://wa.me/' + candidate.phone;
-  }
-
-  function candidateLastInboundLabel(candidate) {
-    if (!candidate.lastInboundAt) return 'Sin inbound';
-    return 'Último inbound: ' + formatDateTimeCO(candidate.lastInboundAt);
   }
 %>
 
@@ -843,8 +830,9 @@
         </div>
 
         <div class="export-bar">
-          <a href="/admin/export?scope=registered" class="export-btn">↓ Exportar registrados</a>
-          <a href="/admin/export?scope=all" class="export-btn">↓ Exportar todos</a>
+          <a href="/admin/export?scope=registered" class="export-btn">↓ Descargar registrados</a>
+          <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Descargar pendientes HV</a>
+          <a href="/admin/export?scope=all" class="export-btn">↓ Descargar todos</a>
           <a href="/admin/vacancies" class="export-btn" style="margin-left:auto;">⚙️ Gestionar vacantes</a>
         </div>
       </div>

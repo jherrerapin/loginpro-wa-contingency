@@ -1,0 +1,2 @@
+ALTER TABLE "Candidate"
+ADD COLUMN "devLastSeenAt" TIMESTAMP(3);

@@ -6,6 +6,12 @@ function normalizePhoneDigits(phone = '') {
   return String(phone || '').replace(/\D/g, '');
 }
 
+function timeValue(value) {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
 export function candidateHasCv(candidate = {}) {
   return Boolean(candidate.cvData)
     || hasValue(candidate.cvOriginalName)
@@ -23,8 +29,8 @@ export function buildAdminOpenWhatsAppPath(candidateId = '') {
 
 export function candidateHasUnreadInbound(candidate = {}) {
   if (!candidate?.lastInboundAt) return false;
-  if (!candidate?.lastOutboundAt) return true;
-  return new Date(candidate.lastInboundAt).getTime() > new Date(candidate.lastOutboundAt).getTime();
+  if (!candidate?.devLastSeenAt) return true;
+  return timeValue(candidate.lastInboundAt) > timeValue(candidate.devLastSeenAt);
 }
 
 export function compareCandidatesByRecentInbound(a = {}, b = {}) {
@@ -32,12 +38,12 @@ export function compareCandidatesByRecentInbound(a = {}, b = {}) {
   const bUnread = candidateHasUnreadInbound(b) ? 1 : 0;
   if (aUnread !== bUnread) return bUnread - aUnread;
 
-  const aInbound = a?.lastInboundAt ? new Date(a.lastInboundAt).getTime() : 0;
-  const bInbound = b?.lastInboundAt ? new Date(b.lastInboundAt).getTime() : 0;
+  const aInbound = timeValue(a?.lastInboundAt);
+  const bInbound = timeValue(b?.lastInboundAt);
   if (aInbound !== bInbound) return bInbound - aInbound;
 
-  const aCreated = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-  const bCreated = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+  const aCreated = timeValue(a?.createdAt);
+  const bCreated = timeValue(b?.createdAt);
   return bCreated - aCreated;
 }
 
@@ -80,6 +86,7 @@ export function isOperationallyCompleteWithoutCv(candidate) {
 }
 
 export function filterCandidatesByScope(candidates, scope = 'all') {
+  if (scope === 'inbox') return candidates.filter((c) => Boolean(c?.lastInboundAt));
   if (scope === 'registered') return candidates.filter((c) => isOperationallyRegistered(c));
   if (scope === 'missing_cv_complete') return candidates.filter((c) => isOperationallyCompleteWithoutCv(c));
   if (scope === 'new') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'NUEVO');

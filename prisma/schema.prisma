@@ -233,6 +233,7 @@ model Candidate {
 
   lastInboundAt            DateTime?
   lastOutboundAt           DateTime?
+  devLastSeenAt            DateTime?
   lastReminderAt           DateTime?
   reminderScheduledFor     DateTime?
   reminderState            ReminderState     @default(NONE)
