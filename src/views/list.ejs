@@ -378,9 +378,11 @@
     return '/admin/candidates/' + candidate.id + '?returnTo=' + encodeURIComponent(currentAdminReturnPath);
   }
 
-  function candidateLastInboundLabel(candidate) {
-    if (!candidate.lastInboundAt) return 'Sin inbound';
-    return 'Último inbound: ' + formatDateTimeCO(candidate.lastInboundAt);
+  function candidateLastMessageLabel(candidate) {
+    const timestamp = candidate.lastMessageAt || candidate.lastInboundAt || candidate.lastOutboundAt || candidate.createdAt;
+    if (!timestamp) return 'Sin mensajes';
+    const direction = candidate.lastMessageDirection === 'OUTBOUND' ? 'saliente' : 'entrante';
+    return 'Último mensaje ' + direction + ': ' + formatDateTimeCO(timestamp);
   }
 
   function candidateFilterValue(candidate, field) {
@@ -508,7 +510,7 @@
               </div>
             <% } %>
             <% if (role === 'dev') { %>
-              <div class="candidate-dev-meta"><%= c.lastInboundAt ? 'Último inbound: ' + formatDateTimeCO(c.lastInboundAt) : 'Sin inbound' %></div>
+              <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
             <% } %>
           </td>
           <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>
@@ -837,7 +839,7 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
-                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastInboundLabel(c) %></div><% } %>
+                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
@@ -882,7 +884,7 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
-                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastInboundLabel(c) %></div><% } %>
+                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
@@ -932,7 +934,7 @@
                       <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
-                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastInboundLabel(c) %></div><% } %>
+                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                     <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
                     <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
@@ -978,7 +980,7 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
-                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastInboundLabel(c) %></div><% } %>
+                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
@@ -1050,7 +1052,7 @@
                 </div>
               <% } %>
               <% if (role === 'dev') { %>
-                <div class="candidate-dev-meta"><%= c.lastInboundAt ? 'Último inbound: ' + formatDateTimeCO(c.lastInboundAt) : 'Sin inbound' %></div>
+                <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
               <% } %>
             </td>
             <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>

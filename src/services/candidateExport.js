@@ -12,6 +12,21 @@ function timeValue(value) {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
+export function candidateLastMessageTime(candidate = {}) {
+  return Math.max(
+    timeValue(candidate?.lastInboundAt),
+    timeValue(candidate?.lastOutboundAt),
+    timeValue(candidate?.createdAt)
+  );
+}
+
+export function candidateLastMessageDirection(candidate = {}) {
+  const inboundTime = timeValue(candidate?.lastInboundAt);
+  const outboundTime = timeValue(candidate?.lastOutboundAt);
+  if (inboundTime === 0 && outboundTime === 0) return null;
+  return inboundTime >= outboundTime ? 'INBOUND' : 'OUTBOUND';
+}
+
 export function candidateHasCv(candidate = {}) {
   return Boolean(candidate.cvData)
     || hasValue(candidate.cvOriginalName)
@@ -28,19 +43,24 @@ export function buildAdminOpenWhatsAppPath(candidateId = '') {
 }
 
 export function candidateHasUnreadInbound(candidate = {}) {
-  if (!candidate?.lastInboundAt) return false;
-  if (!candidate?.devLastSeenAt) return true;
-  return timeValue(candidate.lastInboundAt) > timeValue(candidate.devLastSeenAt);
+  const inboundTime = timeValue(candidate?.lastInboundAt);
+  if (!inboundTime) return false;
+  const reviewedTime = Math.max(
+    timeValue(candidate?.devLastSeenAt),
+    timeValue(candidate?.lastOutboundAt)
+  );
+  if (!reviewedTime) return true;
+  return inboundTime > reviewedTime;
 }
 
 export function compareCandidatesByRecentInbound(a = {}, b = {}) {
+  const aLastMessage = candidateLastMessageTime(a);
+  const bLastMessage = candidateLastMessageTime(b);
+  if (aLastMessage !== bLastMessage) return bLastMessage - aLastMessage;
+
   const aUnread = candidateHasUnreadInbound(a) ? 1 : 0;
   const bUnread = candidateHasUnreadInbound(b) ? 1 : 0;
   if (aUnread !== bUnread) return bUnread - aUnread;
-
-  const aInbound = timeValue(a?.lastInboundAt);
-  const bInbound = timeValue(b?.lastInboundAt);
-  if (aInbound !== bInbound) return bInbound - aInbound;
 
   const aCreated = timeValue(a?.createdAt);
   const bCreated = timeValue(b?.createdAt);

@@ -8,6 +8,8 @@ import {
   buildWhatsAppLink,
   compareCandidatesByRecentInbound,
   candidateHasUnreadInbound,
+  candidateLastMessageTime,
+  candidateLastMessageDirection,
   candidateHasCv,
   exportFilenameByScope,
   filterCandidatesByScope,
@@ -294,7 +296,9 @@ function decorateDashboardCandidate(candidate) {
     hasCv: candidateHasCv(normalizedCandidate),
     isFemaleHumanReview: isFemaleHumanReviewCandidate(normalizedCandidate),
     outboundWindowOpen,
-    hasNewInbound: candidateHasUnreadInbound(normalizedCandidate)
+    hasNewInbound: candidateHasUnreadInbound(normalizedCandidate),
+    lastMessageAt: candidateLastMessageTime(normalizedCandidate) || null,
+    lastMessageDirection: candidateLastMessageDirection(normalizedCandidate)
   };
 }
 
