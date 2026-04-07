@@ -106,14 +106,15 @@ function withFlashMessage(returnTo, type, message) {
 
 const STATUS_LABELS = {
   'NUEVO': 'Nuevo', 'REGISTRADO': 'Registrado', 'VALIDANDO': 'Registrado',
-  'APROBADO': 'Registrado', 'RECHAZADO': 'Rechazado', 'CONTACTADO': 'Contactado'
+  'APROBADO': 'Aprobado', 'RECHAZADO': 'Rechazado', 'CONTACTADO': 'Contactado'
 };
 
-const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'new', 'contacted', 'rejected', 'all']);
-const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all']);
+const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all']);
+const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected', 'all']);
 
 const STATUS_SCOPE_SUMMARY_LABELS = {
-  inbox: 'en bandeja', registered: 'registrados', new: 'nuevos', contacted: 'contactados',
+  inbox: 'en bandeja', registered: 'registrados', missing_cv_complete: 'completos pendientes de HV',
+  approved: 'aprobados', new: 'nuevos', contacted: 'contactados',
   rejected: 'rechazados', all: 'totales'
 };
 const ACTIVE_BOOKING_STATUSES = ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED'];
@@ -130,6 +131,7 @@ const ALLOWED_CV_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 ]);
 const ALLOWED_CV_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
+const OUTREACH_DEFAULT_MESSAGE = 'Hola {nombre}, te escribo por tu proceso para la vacante {vacante} en {ciudad}. ¿Podemos continuar?';
 
 function buildCvStatusQuery(type, message) {
   const params = new URLSearchParams();
@@ -151,6 +153,66 @@ function normalizeBinaryData(value) {
   if (value instanceof ArrayBuffer) return Buffer.from(value);
   if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
   return Buffer.from(value);
+}
+
+function normalizeCandidateListFilters(source = {}) {
+  return {
+    neighborhood: normalizeString(source.neighborhood) || '',
+    locality: normalizeString(source.locality) || '',
+    experienceInfo: normalizeString(source.experienceInfo) || '',
+    experienceTime: normalizeString(source.experienceTime) || '',
+    transportMode: normalizeString(source.transportMode) || '',
+  };
+}
+
+function includesCaseInsensitive(value, search) {
+  if (!search) return true;
+  return String(value || '').toLowerCase().includes(String(search).toLowerCase());
+}
+
+function applyRecruiterCandidateFilters(candidates, filters) {
+  return candidates.filter((candidate) => (
+    includesCaseInsensitive(candidate.neighborhood || candidate.zone, filters.neighborhood)
+    && includesCaseInsensitive(candidate.locality || candidate.zone, filters.locality)
+    && includesCaseInsensitive(candidate.experienceInfo, filters.experienceInfo)
+    && includesCaseInsensitive(candidate.experienceTime, filters.experienceTime)
+    && includesCaseInsensitive(candidate.transportMode, filters.transportMode)
+  ));
+}
+
+function normalizeOutreachFilters(source = {}) {
+  const rawTemplate = typeof source.messageTemplate === 'string' ? source.messageTemplate.trim() : '';
+  return {
+    city: normalizeString(source.city) || '',
+    vacancyId: normalizeString(source.vacancyId) || '',
+    messageTemplate: rawTemplate || OUTREACH_DEFAULT_MESSAGE,
+  };
+}
+
+function sortOutreachCandidates(a, b) {
+  const cityA = String(a?.vacancy?.city || '').localeCompare(String(b?.vacancy?.city || ''), 'es', { sensitivity: 'base' });
+  if (cityA !== 0) return cityA;
+  const vacancyA = String(a?.vacancy?.title || a?.vacancy?.role || '').localeCompare(String(b?.vacancy?.title || b?.vacancy?.role || ''), 'es', { sensitivity: 'base' });
+  if (vacancyA !== 0) return vacancyA;
+  return String(a?.fullName || '').localeCompare(String(b?.fullName || ''), 'es', { sensitivity: 'base' });
+}
+
+function filterOutreachCandidates(candidates, filters) {
+  return candidates.filter((candidate) => {
+    if (filters.city && candidate?.vacancy?.city !== filters.city) return false;
+    if (filters.vacancyId && candidate?.vacancyId !== filters.vacancyId) return false;
+    return true;
+  });
+}
+
+function personalizeOutreachMessage(template, candidate) {
+  const fullName = candidate?.fullName || 'candidato';
+  const vacancy = candidate?.vacancy?.title || candidate?.vacancy?.role || 'la vacante';
+  const city = candidate?.vacancy?.city || 'tu ciudad';
+  return String(template || OUTREACH_DEFAULT_MESSAGE)
+    .replaceAll('{nombre}', fullName)
+    .replaceAll('{vacante}', vacancy)
+    .replaceAll('{ciudad}', city);
 }
 
 function ensureDevRole(req, res, next) {
@@ -359,6 +421,28 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
   };
 }
 
+async function loadApprovedOutreachCandidates(prisma) {
+  const candidates = await prisma.candidate.findMany({
+    where: { status: 'APROBADO' },
+    select: {
+      id: true,
+      fullName: true,
+      phone: true,
+      vacancyId: true,
+      createdAt: true,
+      vacancy: {
+        select: {
+          id: true,
+          title: true,
+          role: true,
+          city: true
+        }
+      }
+    }
+  });
+  return candidates.sort(sortOutreachCandidates);
+}
+
 function parseVacancyBody(body) {
   const str = (v) => (typeof v === 'string' ? v.trim() || null : null);
   const int = (v) => { const n = parseInt(v, 10); return Number.isNaN(n) ? null : n; };
@@ -511,6 +595,7 @@ export function adminRouter(prisma) {
   // ── Dashboard principal ──────────────────────────────────────
   router.get('/', async (req, res) => {
     const requestedStatus = normalizeString(req.query.status);
+    const adminFilters = normalizeCandidateListFilters(req.query);
     const canUseLegacyScope = requestedStatus
       && ADMIN_STATUS_SCOPES.has(requestedStatus)
       && (req.userRole === 'dev' || requestedStatus !== 'inbox');
@@ -550,11 +635,16 @@ export function adminRouter(prisma) {
         legacyQuery.where = { lastInboundAt: { not: null } };
         legacyQuery.orderBy = [{ lastInboundAt: 'desc' }, { createdAt: 'desc' }];
       }
-      if (req.userRole !== 'dev') legacyQuery.take = 200;
+      if (req.userRole !== 'dev' && !['registered', 'missing_cv_complete'].includes(requestedStatus)) {
+        legacyQuery.take = 200;
+      }
 
       const allCandidates = (await prisma.candidate.findMany(legacyQuery))
         .map(decorateDashboardCandidate);
-      const candidates = filterCandidatesByScope(allCandidates, requestedStatus);
+      let candidates = filterCandidatesByScope(allCandidates, requestedStatus);
+      if (req.userRole === 'admin' && ['registered', 'missing_cv_complete'].includes(requestedStatus)) {
+        candidates = applyRecruiterCandidateFilters(candidates, adminFilters);
+      }
       if (req.userRole === 'dev') {
         candidates.sort(compareCandidatesByRecentInbound);
       }
@@ -566,7 +656,8 @@ export function adminRouter(prisma) {
         activeCity: null, selectedDate: todayCO(), todayStr: todayCO(),
         successMsg: normalizeString(req.query.success),
         errorMsg: normalizeString(req.query.error),
-        isFemaleHumanReviewCandidate
+        isFemaleHumanReviewCandidate,
+        adminFilters
       });
     }
 
@@ -585,7 +676,8 @@ export function adminRouter(prisma) {
       normalizeCandidateStatusForUI, candidates: [], activeStatusScope: null, summaryLabel: '',
       successMsg: normalizeString(req.query.success),
       errorMsg: normalizeString(req.query.error),
-      isFemaleHumanReviewCandidate
+      isFemaleHumanReviewCandidate,
+      adminFilters
     });
   });
 
@@ -701,7 +793,7 @@ export function adminRouter(prisma) {
     const statusColors = {
       REGISTRADO: 'FFDCFCE7',
       VALIDANDO: 'FFDBEAFE',
-      APROBADO: 'FFDCFCE7',
+      APROBADO: 'FFD1FAE5',
       CONTACTADO: 'FFEDE9FE',
       RECHAZADO: 'FFFEE2E2',
       NUEVO: 'FFF3F4F6'
@@ -743,6 +835,80 @@ export function adminRouter(prisma) {
   });
 
   // ── Detalle de candidato ─────────────────────────────────────
+  router.get('/outreach/approved', async (req, res) => {
+    const outreachFilters = normalizeOutreachFilters(req.query);
+    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma);
+    const cityOptions = [...new Set(allApprovedCandidates
+      .map((candidate) => candidate?.vacancy?.city)
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    const vacancyOptions = allApprovedCandidates
+      .filter((candidate) => candidate?.vacancy?.id)
+      .map((candidate) => ({
+        id: candidate.vacancy.id,
+        label: `${candidate.vacancy.city || 'Sin ciudad'} · ${candidate.vacancy.title || candidate.vacancy.role || 'Sin vacante'}`
+      }))
+      .filter((option, index, array) => array.findIndex((item) => item.id === option.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    const candidates = filterOutreachCandidates(allApprovedCandidates, outreachFilters);
+
+    res.render('outreachApproved', {
+      role: req.userRole,
+      candidates,
+      cityOptions,
+      vacancyOptions,
+      outreachFilters,
+      preparedRecipients: [],
+      preparedSuccess: normalizeString(req.query.success),
+      preparedError: normalizeString(req.query.error)
+    });
+  });
+
+  router.post('/outreach/approved/prepare', express.urlencoded({ extended: true }), async (req, res) => {
+    const outreachFilters = normalizeOutreachFilters(req.body);
+    const selectedCandidateIds = Array.isArray(req.body.candidateIds)
+      ? req.body.candidateIds
+      : (req.body.candidateIds ? [req.body.candidateIds] : []);
+    const selectedIds = new Set(selectedCandidateIds.map((value) => String(value || '').trim()).filter(Boolean));
+    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma);
+    const cityOptions = [...new Set(allApprovedCandidates
+      .map((candidate) => candidate?.vacancy?.city)
+      .filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    const vacancyOptions = allApprovedCandidates
+      .filter((candidate) => candidate?.vacancy?.id)
+      .map((candidate) => ({
+        id: candidate.vacancy.id,
+        label: `${candidate.vacancy.city || 'Sin ciudad'} · ${candidate.vacancy.title || candidate.vacancy.role || 'Sin vacante'}`
+      }))
+      .filter((option, index, array) => array.findIndex((item) => item.id === option.id) === index)
+      .sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    const candidates = filterOutreachCandidates(allApprovedCandidates, outreachFilters);
+    const preparedRecipients = candidates
+      .filter((candidate) => selectedIds.has(candidate.id))
+      .map((candidate) => {
+        const personalizedMessage = personalizeOutreachMessage(outreachFilters.messageTemplate, candidate);
+        const params = new URLSearchParams({ returnTo: '/admin/outreach/approved' });
+        params.set('text', personalizedMessage);
+        return {
+          ...candidate,
+          personalizedMessage,
+          whatsappHref: `/admin/candidates/${candidate.id}/open-whatsapp?${params.toString()}`
+        };
+      });
+
+    res.render('outreachApproved', {
+      role: req.userRole,
+      candidates,
+      cityOptions,
+      vacancyOptions,
+      outreachFilters,
+      preparedRecipients,
+      preparedSuccess: preparedRecipients.length ? `Ronda preparada para ${preparedRecipients.length} candidato(s).` : null,
+      preparedError: preparedRecipients.length ? null : 'Selecciona al menos un candidato aprobado para preparar la ronda.'
+    });
+  });
+
   router.get('/candidates/:id', async (req, res) => {
     const candidate = await prisma.candidate.findUnique({
       where: { id: req.params.id },
@@ -862,7 +1028,7 @@ export function adminRouter(prisma) {
   router.post('/candidates/:id/status', express.urlencoded({ extended: true }), async (req, res) => {
     const { id } = req.params;
     const status = normalizeString(req.body.status);
-    const allowed = ['NUEVO', 'REGISTRADO', 'CONTACTADO', 'RECHAZADO'];
+    const allowed = ['NUEVO', 'REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO'];
     if (!status || !allowed.includes(status)) return res.redirect(`/admin/candidates/${id}`);
     await prisma.candidate.update({ where: { id }, data: { status } });
     res.redirect(`/admin/candidates/${id}`);
@@ -872,6 +1038,7 @@ export function adminRouter(prisma) {
   router.get('/candidates/:id/open-whatsapp', async (req, res) => {
     const { id } = req.params;
     const returnTo = safeAdminReturnPath(req.query.returnTo || req.get('referer') || '/admin');
+    const whatsappText = typeof req.query.text === 'string' ? req.query.text.trim() : '';
     const candidate = await prisma.candidate.findUnique({
       where: { id },
       select: { id: true, phone: true }
@@ -881,8 +1048,8 @@ export function adminRouter(prisma) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
 
-    const whatsappUrl = buildWhatsAppLink(candidate.phone);
-    if (!whatsappUrl) {
+    const whatsappBaseUrl = buildWhatsAppLink(candidate.phone);
+    if (!whatsappBaseUrl) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'El candidato no tiene un número válido para WhatsApp.'));
     }
 
@@ -893,6 +1060,9 @@ export function adminRouter(prisma) {
         : { status: 'CONTACTADO' }
     });
 
+    const whatsappUrl = whatsappText
+      ? `${whatsappBaseUrl}?text=${encodeURIComponent(whatsappText)}`
+      : whatsappBaseUrl;
     return res.redirect(whatsappUrl);
   });
 

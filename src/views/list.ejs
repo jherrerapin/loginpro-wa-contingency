@@ -150,6 +150,7 @@
     .badge-nuevo      { background: #f3f4f6;              color: #6b7280; }
     .badge-registrado { background: var(--green-light);  color: var(--green); }
     .badge-validando  { background: var(--blue-light);   color: var(--blue); }
+    .badge-aprobado   { background: #ccfbf1;             color: #0f766e; }
     .badge-contactado { background: var(--purple-light); color: var(--purple); }
     .badge-rechazado  { background: var(--red-light);    color: var(--red); }
     .badge-human-review { background: #fef3c7; color: #92400e; }
@@ -327,7 +328,12 @@
 
 <%
   const isLegacyMode = typeof mode === 'undefined' || mode === 'legacy';
-  const currentLegacyPath = activeStatusScope ? '/admin?status=' + encodeURIComponent(activeStatusScope) : '/admin';
+  const legacyParams = new URLSearchParams();
+  if (activeStatusScope) legacyParams.set('status', activeStatusScope);
+  ['neighborhood', 'locality', 'experienceInfo', 'experienceTime', 'transportMode'].forEach((key) => {
+    if (adminFilters && adminFilters[key]) legacyParams.set(key, adminFilters[key]);
+  });
+  const currentLegacyPath = '/admin' + (legacyParams.toString() ? '?' + legacyParams.toString() : '');
   const dashboardParams = new URLSearchParams();
   if (activeCity) dashboardParams.set('city', activeCity);
   if (selectedDate) dashboardParams.set('date', selectedDate);
@@ -363,11 +369,18 @@
   <% if (errorMsg) { %>
     <div class="alert alert-error"><%= errorMsg %></div>
   <% } %>
+  <% if (role === 'dev') { %>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <a href="/admin?status=inbox" class="export-btn">Inbox</a>
+      <a href="/admin?status=all" class="export-btn">Ver todos</a>
+    </div>
+  <% } %>
 
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
     <% const legacyTabs = [
       ...(role === 'dev' ? [{ scope: 'inbox', label: 'Inbox' }] : []),
       { scope: 'registered', label: 'Registrados' },
+      ...(role === 'admin' ? [{ scope: 'missing_cv_complete', label: 'Pendientes HV' }] : []),
       { scope: 'new',        label: 'Nuevos' },
       { scope: 'contacted',  label: 'Contactados' },
       { scope: 'rejected',   label: 'Rechazados' },
@@ -378,14 +391,40 @@
     <% } %>
   </div>
 
+  <% const showRecruiterFilters = role === 'admin' && ['registered', 'missing_cv_complete'].includes(activeStatusScope); %>
+  <% if (showRecruiterFilters) { %>
+    <form method="get" action="/admin" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow-sm);">
+      <input type="hidden" name="status" value="<%= activeStatusScope %>" />
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Barrio
+        <input type="text" name="neighborhood" value="<%= adminFilters?.neighborhood || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:170px;" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Localidad / zona
+        <input type="text" name="locality" value="<%= adminFilters?.locality || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:170px;" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Experiencia
+        <input type="text" name="experienceInfo" value="<%= adminFilters?.experienceInfo || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:160px;" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Tiempo experiencia
+        <input type="text" name="experienceTime" value="<%= adminFilters?.experienceTime || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:160px;" />
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Transporte
+        <input type="text" name="transportMode" value="<%= adminFilters?.transportMode || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:160px;" />
+      </label>
+      <button type="submit" class="export-btn" style="cursor:pointer;">Filtrar</button>
+      <a href="/admin?status=<%= activeStatusScope %>" class="export-btn">Limpiar</a>
+    </form>
+  <% } %>
+
   <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Mostrando <%= candidates.length %> candidato(s) <%= summaryLabel %></p>
 
   <div class="export-bar" style="border-radius:8px 8px 0 0;border:1px solid var(--border);margin-bottom:-1px;">
     <a href="/admin/export?scope=registered" class="export-btn">↓ Descargar registrados</a>
     <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Descargar pendientes HV</a>
+    <a href="/admin/export?scope=approved" class="export-btn">↓ Descargar aprobados</a>
     <a href="/admin/export?scope=contacted" class="export-btn">↓ Contactados</a>
     <a href="/admin/export?scope=rejected" class="export-btn">↓ Rechazados</a>
     <a href="/admin/export?scope=all" class="export-btn">↓ Todos</a>
+    <a href="/admin/outreach/approved" class="export-btn">↗ Outreach aprobados</a>
   </div>
 
   <table class="legacy-table" style="background:var(--surface);box-shadow:var(--shadow-sm);border-radius:0 0 8px 8px;border:1px solid var(--border);overflow:hidden;">
@@ -399,8 +438,8 @@
     <tbody>
       <% for (const c of candidates) { %>
         <% const uiStatus = normalizeCandidateStatusForUI(c.status); %>
-        <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado' }; %>
-        <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado' }; %>
+        <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', APROBADO:'badge-aprobado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado' }; %>
+        <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', APROBADO:'Aprobado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado' }; %>
         <tr>
           <td><%= formatDateTimeCO(c.createdAt) %></td>
           <td style="font-weight:600;">
@@ -474,7 +513,7 @@
     NUEVO:      { cls: 'badge-nuevo',      label: 'Nuevo' },
     REGISTRADO: { cls: 'badge-registrado', label: 'Registrado' },
     VALIDANDO:  { cls: 'badge-validando',  label: 'Validando' },
-    APROBADO:   { cls: 'badge-registrado', label: 'Aprobado' },
+    APROBADO:   { cls: 'badge-aprobado',   label: 'Aprobado' },
     CONTACTADO: { cls: 'badge-contactado', label: 'Contactado' },
     RECHAZADO:  { cls: 'badge-rechazado',  label: 'Rechazado' }
   };
@@ -526,6 +565,12 @@
   <% } %>
   <% if (errorMsg) { %>
     <div class="alert alert-error"><%= errorMsg %></div>
+  <% } %>
+  <% if (role === 'dev') { %>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <a href="/admin?status=inbox" class="export-btn">Inbox</a>
+      <a href="/admin?status=all" class="export-btn">Ver todos</a>
+    </div>
   <% } %>
 
   <% if (cities.length > 0) { %>
@@ -832,7 +877,9 @@
         <div class="export-bar">
           <a href="/admin/export?scope=registered" class="export-btn">↓ Descargar registrados</a>
           <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Descargar pendientes HV</a>
+          <a href="/admin/export?scope=approved" class="export-btn">↓ Descargar aprobados</a>
           <a href="/admin/export?scope=all" class="export-btn">↓ Descargar todos</a>
+          <a href="/admin/outreach/approved" class="export-btn">↗ Outreach aprobados</a>
           <a href="/admin/vacancies" class="export-btn" style="margin-left:auto;">⚙️ Gestionar vacantes</a>
         </div>
       </div>
@@ -851,7 +898,7 @@
       <tbody>
         <% for (const c of legacyCandidates.slice(0, 10)) { %>
           <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
-          <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'} }; %>
+          <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, APROBADO:{cls:'badge-aprobado',label:'Aprobado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'} }; %>
           <tr>
             <td style="font-weight:600;">
               <%= c.fullName || '—' %>

@@ -48,7 +48,7 @@ export function compareCandidatesByRecentInbound(a = {}, b = {}) {
 }
 
 export function normalizeCandidateStatusForUI(status) {
-  if (status === 'VALIDANDO' || status === 'APROBADO') return 'REGISTRADO';
+  if (status === 'VALIDANDO') return 'REGISTRADO';
   return status;
 }
 
@@ -87,6 +87,7 @@ export function isOperationallyCompleteWithoutCv(candidate) {
 
 export function filterCandidatesByScope(candidates, scope = 'all') {
   if (scope === 'inbox') return candidates.filter((c) => Boolean(c?.lastInboundAt));
+  if (scope === 'approved') return candidates.filter((c) => c?.status === 'APROBADO');
   if (scope === 'registered') return candidates.filter((c) => isOperationallyRegistered(c));
   if (scope === 'missing_cv_complete') return candidates.filter((c) => isOperationallyCompleteWithoutCv(c));
   if (scope === 'new') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'NUEVO');
@@ -107,12 +108,13 @@ export function formatDateForFilenameCO(date = new Date()) {
 }
 
 export function exportFilenameByScope(scope = 'all') {
-  const safeScope = ['all', 'registered', 'missing_cv_complete', 'new', 'contacted', 'rejected'].includes(scope)
+  const safeScope = ['all', 'registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected'].includes(scope)
     ? scope
     : 'all';
   const scopeLabelByKey = {
     registered: 'registrados',
     missing_cv_complete: 'pendientes_hv',
+    approved: 'aprobados',
     new: 'nuevos',
     contacted: 'contactados',
     rejected: 'rechazados',
