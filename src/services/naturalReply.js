@@ -69,7 +69,7 @@ export async function generateNaturalReply({
   fallbackText = null
 }) {
   if (!process.env.OPENAI_API_KEY) {
-    return fallbackText || '¡Hola! Con gusto te ayudo. ¿En qué puedo ayudarte?';
+    return fallbackText || 'Te lei, dame un momento y continuo contigo.';
   }
 
   const systemPrompt = buildSystemPrompt(vacancy, candidate, conversationContext);
@@ -107,9 +107,9 @@ export async function generateNaturalReply({
 
     const content = response.data?.choices?.[0]?.message?.content;
     if (typeof content === 'string' && content.trim()) return content.trim();
-    return fallbackText || 'Perdona, hubo un problema técnico. ¿Puedes repetirme eso?';
+    return fallbackText || 'Te lei, dame un momento y continuo contigo.';
   } catch {
-    return fallbackText || 'Perdona, hubo un problema técnico. ¿Puedes repetirme eso?';
+    return fallbackText || 'Te lei, dame un momento y continuo contigo.';
   }
 }
 

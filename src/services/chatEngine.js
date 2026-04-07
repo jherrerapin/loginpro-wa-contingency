@@ -1,5 +1,14 @@
 import { ConversationStep } from '@prisma/client';
-import { think, act, extractEngineCandidateFields } from './conversationEngine.js';
+import { think, act, extractEngineCandidateFields, hasRecentHumanIntervention } from './conversationEngine.js';
+
+function latestOutboundWasManualHuman(recentMessages = []) {
+  const lastOutbound = [...(recentMessages || [])]
+    .reverse()
+    .find((message) => message?.direction === 'OUTBOUND');
+
+  if (!lastOutbound) return false;
+  return hasRecentHumanIntervention([lastOutbound]);
+}
 
 /**
  * chatEngine.js
@@ -19,6 +28,32 @@ export async function runChatEngine({
   candidateFieldHints = {},
 }) {
   const currentStep = candidate.currentStep || ConversationStep.MENU;
+
+  if (!candidate.botPaused && latestOutboundWasManualHuman(recentMessages)) {
+    await prisma.candidate.update({
+      where: { id: candidate.id },
+      data: {
+        botPaused: true,
+        botPausedAt: new Date(),
+        botPauseReason: 'Intervencion humana detectada en el chat',
+        reminderScheduledFor: null,
+        reminderState: 'CANCELLED'
+      }
+    });
+
+    return {
+      reply: null,
+      actions: [],
+      nextStep: currentStep,
+      extractedFields: {},
+      candidateFields: {},
+      fallback: false,
+      fallbackReason: null,
+      loopGuardApplied: false,
+      suppressed: true,
+      suppressedReason: 'manual_human_outbound_detected',
+    };
+  }
 
   const result = await think({
     inboundText,
@@ -58,5 +93,7 @@ export async function runChatEngine({
     fallback: result.fallback,
     fallbackReason: result.fallbackReason || null,
     loopGuardApplied: Boolean(result.loopGuardApplied),
+    suppressed: false,
+    suppressedReason: null,
   };
 }

@@ -1,4 +1,15 @@
-const CANDIDATE_FIELDS = ['fullName', 'documentType', 'documentNumber', 'age', 'neighborhood', 'locality', 'medicalRestrictions', 'transportMode'];
+const CANDIDATE_FIELDS = [
+  'fullName',
+  'documentType',
+  'documentNumber',
+  'age',
+  'neighborhood',
+  'locality',
+  'medicalRestrictions',
+  'transportMode',
+  'experienceInfo',
+  'experienceTime'
+];
 
 export { CANDIDATE_FIELDS };
 
@@ -47,15 +58,15 @@ export function summarizeError(error) {
 }
 
 export function inferIntent(text = '') {
-  const n = String(text).trim().toLowerCase();
-  if (!n) return 'empty';
-  if (/(no me interesa|ya no|mejor no|prefiero no|paso)/i.test(n)) return 'decline_intent';
-  if (/(quiero informacion|quiero saber|informacion|antes quiero saber|primero quiero saber)/i.test(n)) return 'info_request';
-  if (/(no te voy a dar mis datos|antes de darte mis datos|antes de enviar mis datos)/i.test(n)) return 'objection';
-  if (/(ya envie eso|ya envié eso|ya lo envie|ya lo envié|ya mande eso)/i.test(n)) return 'already_sent';
-  if (/(otra vacante|otro cargo|cambie de opinion|cambié de opinión|me interesa otra)/i.test(n)) return 'change_intent';
-  if (/(si|sí|quiero|interesad|continuar|postular|aplicar)/i.test(n)) return 'apply_intent';
-  if (/(hoja de vida|cv|curriculum)/i.test(n)) return 'cv_intent';
+  const normalized = String(text).trim().toLowerCase();
+  if (!normalized) return 'empty';
+  if (/(no me interesa|ya no|mejor no|prefiero no|paso)/i.test(normalized)) return 'decline_intent';
+  if (/(quiero informacion|quiero saber|informacion|antes quiero saber|primero quiero saber)/i.test(normalized)) return 'info_request';
+  if (/(no te voy a dar mis datos|antes de darte mis datos|antes de enviar mis datos)/i.test(normalized)) return 'objection';
+  if (/(ya envie eso|ya envié eso|ya lo envie|ya lo envié|ya mande eso)/i.test(normalized)) return 'already_sent';
+  if (/(otra vacante|otro cargo|cambie de opinion|cambié de opinión|me interesa otra)/i.test(normalized)) return 'change_intent';
+  if (/(si|sí|quiero|interesad|continuar|postular|aplicar)/i.test(normalized)) return 'apply_intent';
+  if (/(hoja de vida|cv|curriculum)/i.test(normalized)) return 'cv_intent';
   return 'data_or_unknown';
 }
 
@@ -71,7 +82,6 @@ export function isSuspiciousFullName(value = '') {
   if (!name) return false;
   if (/\d/.test(name)) return true;
   if (!/^[A-Za-zÁÉÍÓÚÑáéíóúñ\s'.-]+$/.test(name)) return true;
-
   if (/[?¿]/.test(name)) return true;
 
   const explicitNonNamePatterns = [
@@ -96,16 +106,12 @@ export function isSuspiciousFullName(value = '') {
   if (commonIntentPhrases.some((phrase) => normalized.includes(phrase))) return true;
 
   const parts = name.split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return true;
-  if (parts.some((p) => p.length < 2)) return true;
-
-  if (parts.length > 4) return true;
+  if (parts.length < 2 || parts.length > 4) return true;
+  if (parts.some((part) => part.length < 2)) return true;
 
   const connectors = new Set(['de', 'del', 'la', 'las', 'los', 'y']);
-  const lexicalParts = parts.filter((p) => !connectors.has(p.toLowerCase()));
-  if (lexicalParts.length < 2) return true;
-
-  return false;
+  const lexicalParts = parts.filter((part) => !connectors.has(part.toLowerCase()));
+  return lexicalParts.length < 2;
 }
 
 function normalizeComparableValue(field, value) {
@@ -140,6 +146,10 @@ function isIncompleteFieldValue(field, value) {
       return ['no', 'ninguna', 'ninguno', 'pendiente'].includes(normalized);
     case 'locality':
       return normalized.length < 3;
+    case 'experienceInfo':
+      return ['pendiente', 'tal vez'].includes(normalized);
+    case 'experienceTime':
+      return !/\d/.test(normalized);
     default:
       return false;
   }
@@ -170,6 +180,10 @@ function canConsolidateField(field, currentValue, nextValue) {
     case 'medicalRestrictions':
       return currentNormalized.length < nextNormalized.length
         || /sin restricciones|no tengo restricciones|ninguna restriccion/.test(nextNormalized);
+    case 'experienceInfo':
+      return currentNormalized !== nextNormalized;
+    case 'experienceTime':
+      return currentNormalized.length < nextNormalized.length || (!/\d/.test(currentNormalized) && /\d/.test(nextNormalized));
     default:
       return false;
   }
@@ -191,16 +205,15 @@ export function splitFieldDecisions(parsedData = {}, candidate = {}, options = {
   for (const field of CANDIDATE_FIELDS) {
     const value = parsedData[field];
     if (value === undefined || value === null || value === '') continue;
-    const fieldSource = sourceByField[field] || 'unknown';
 
+    const fieldSource = sourceByField[field] || 'unknown';
     if (field === 'fullName' && isSuspiciousFullName(value)) {
       decisions.rejectedFields.push('fullName');
       decisions.suspiciousFullNameRejected = true;
-      decisions.rejectedNameReason = sourceByField.fullName ? `suspicious_${sourceByField.fullName}` : 'suspicious_name_pattern';
+      decisions.rejectedNameReason = fieldSource ? `suspicious_${fieldSource}` : 'suspicious_name_pattern';
       continue;
     }
 
-    const trimmedValue = String(value).trim();
     const candidateHasValue = candidate[field] !== undefined && candidate[field] !== null && candidate[field] !== '';
     const shouldForceOverwrite = allowOverwriteFields.has(field);
 
