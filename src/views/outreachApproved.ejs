@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Outreach aprobados</title>
+  <link rel="icon" type="image/png" href="/public/favicon-loginpro.svg" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f5f7; color: #1f2937; }
+    .navbar { background: #1e2d3d; padding: 12px 24px; display: flex; align-items: center; gap: 20px; }
+    .navbar a { color: #ecf0f1; text-decoration: none; font-weight: 500; font-size: 14px; }
+    .navbar a:hover { color: #7dd3fc; }
+    .navbar .brand img { height: 30px; display: block; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px 40px; }
+    .header { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .header h1 { color: #1e2d3d; font-size: 24px; }
+    .header p { color: #6b7280; margin-top: 4px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 18px; margin-bottom: 18px; }
+    .card h2 { color: #1e2d3d; font-size: 16px; margin-bottom: 12px; }
+    .alert { padding: 12px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 14px; }
+    .alert-success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 6px; min-width: 220px; }
+    .field label { font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+    .field input, .field select, .field textarea {
+      border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: inherit;
+    }
+    .field textarea { min-height: 110px; resize: vertical; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 14px;
+      background: #fff; color: #334155; text-decoration: none; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .btn-primary { background: #0d7a6b; border-color: #0d7a6b; color: #fff; }
+    .btn-primary:hover { background: #0a5f53; }
+    .btn:hover { background: #f8fafc; }
+    .hint { font-size: 13px; color: #6b7280; line-height: 1.5; }
+    .candidate-table { width: 100%; border-collapse: collapse; }
+    .candidate-table th, .candidate-table td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+    .candidate-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; background: #f8fafc; }
+    .candidate-table tr:last-child td { border-bottom: none; }
+    .candidate-name { font-weight: 700; color: #1e2d3d; }
+    .candidate-meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    .prepared-list { display: grid; gap: 12px; }
+    .prepared-item { border: 1px solid #dbeafe; background: #f8fbff; border-radius: 10px; padding: 14px; }
+    .prepared-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .prepared-body { white-space: pre-wrap; color: #334155; font-size: 14px; margin-bottom: 10px; }
+    .empty { color: #6b7280; text-align: center; padding: 18px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    @media (max-width: 768px) {
+      .container { padding: 18px 12px 32px; }
+      .candidate-table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/admin" aria-label="Inicio LoginPro">
+      <img src="/public/logo-loginpro.svg" alt="LoginPro" />
+    </a>
+    <a href="/admin">Panel</a>
+    <a href="/admin/vacancies">Vacantes</a>
+    <a href="/admin/outreach/approved">Outreach aprobados</a>
+    <% if (role === 'dev') { %>
+      <a href="/admin/monitor">Monitor</a>
+    <% } %>
+    <form method="post" action="/logout" style="margin-left:auto;">
+      <button type="submit" class="btn">Cerrar sesión</button>
+    </form>
+  </nav>
+
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>Outreach de candidatos aprobados</h1>
+        <p>Prepara mensajes asistidos por WhatsApp normal del reclutador, sin usar la línea Meta del bot.</p>
+      </div>
+      <a href="/admin" class="btn">Volver al panel</a>
+    </div>
+
+    <% if (preparedSuccess) { %>
+      <div class="alert alert-success"><%= preparedSuccess %></div>
+    <% } %>
+    <% if (preparedError) { %>
+      <div class="alert alert-error"><%= preparedError %></div>
+    <% } %>
+
+    <div class="card">
+      <h2>Filtros</h2>
+      <form method="get" action="/admin/outreach/approved" class="filters">
+        <div class="field">
+          <label for="city">Ciudad</label>
+          <select id="city" name="city">
+            <option value="">Todas</option>
+            <% for (const city of cityOptions) { %>
+              <option value="<%= city %>" <%= outreachFilters.city === city ? 'selected' : '' %>><%= city %></option>
+            <% } %>
+          </select>
+        </div>
+        <div class="field">
+          <label for="vacancyId">Vacante</label>
+          <select id="vacancyId" name="vacancyId">
+            <option value="">Todas</option>
+            <% for (const vacancy of vacancyOptions) { %>
+              <option value="<%= vacancy.id %>" <%= outreachFilters.vacancyId === vacancy.id ? 'selected' : '' %>><%= vacancy.label %></option>
+            <% } %>
+          </select>
+        </div>
+        <button type="submit" class="btn">Aplicar filtros</button>
+        <a href="/admin/outreach/approved" class="btn">Limpiar</a>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Preparar ronda</h2>
+      <p class="hint">Placeholders disponibles: <code>{nombre}</code>, <code>{vacante}</code>, <code>{ciudad}</code>.</p>
+      <form method="post" action="/admin/outreach/approved/prepare">
+        <input type="hidden" name="city" value="<%= outreachFilters.city %>" />
+        <input type="hidden" name="vacancyId" value="<%= outreachFilters.vacancyId %>" />
+        <div class="field" style="margin: 14px 0 16px;">
+          <label for="messageTemplate">Mensaje editable</label>
+          <textarea id="messageTemplate" name="messageTemplate"><%= outreachFilters.messageTemplate %></textarea>
+        </div>
+
+        <% if (candidates.length === 0) { %>
+          <div class="empty">No hay candidatos aprobados con los filtros actuales.</div>
+        <% } else { %>
+          <table class="candidate-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="selectAll" /></th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Vacante</th>
+                <th>Ciudad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for (const candidate of candidates) { %>
+                <% const isPrepared = preparedRecipients.some((recipient) => recipient.id === candidate.id); %>
+                <tr>
+                  <td><input type="checkbox" name="candidateIds" value="<%= candidate.id %>" <%= isPrepared ? 'checked' : '' %> /></td>
+                  <td>
+                    <div class="candidate-name"><%= candidate.fullName || 'Sin nombre' %></div>
+                    <div class="candidate-meta">Creado: <%= new Date(candidate.createdAt).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }) %></div>
+                  </td>
+                  <td><%= candidate.phone || 'Sin número' %></td>
+                  <td><%= candidate.vacancy?.title || candidate.vacancy?.role || 'Sin vacante' %></td>
+                  <td><%= candidate.vacancy?.city || 'Sin ciudad' %></td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+          <div class="toolbar">
+            <button type="submit" class="btn btn-primary">Preparar ronda</button>
+          </div>
+        <% } %>
+      </form>
+    </div>
+
+    <% if (preparedRecipients.length > 0) { %>
+      <div class="card">
+        <h2>Destinatarios preparados</h2>
+        <div class="toolbar" style="margin-bottom:12px;">
+          <a href="<%= preparedRecipients[0].whatsappHref %>" target="_blank" rel="noopener" class="btn btn-primary">Abrir primero</a>
+          <button type="button" class="btn" onclick="openPreparedBatch()">Abrir lote</button>
+        </div>
+        <div class="prepared-list">
+          <% for (const recipient of preparedRecipients) { %>
+            <div class="prepared-item">
+              <div class="prepared-head">
+                <div>
+                  <div class="candidate-name"><%= recipient.fullName || 'Sin nombre' %></div>
+                  <div class="candidate-meta"><%= recipient.vacancy?.title || recipient.vacancy?.role || 'Sin vacante' %> · <%= recipient.vacancy?.city || 'Sin ciudad' %></div>
+                </div>
+                <a href="<%= recipient.whatsappHref %>" target="_blank" rel="noopener" class="btn btn-primary prepared-wa-link">Abrir</a>
+              </div>
+              <div class="prepared-body"><%= recipient.personalizedMessage %></div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <script>
+    const selectAll = document.getElementById('selectAll');
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        document.querySelectorAll('input[name="candidateIds"]').forEach((checkbox) => {
+          checkbox.checked = selectAll.checked;
+        });
+      });
+    }
+
+    function openPreparedBatch() {
+      const links = Array.from(document.querySelectorAll('.prepared-wa-link'));
+      if (!links.length) return;
+      if (!window.confirm('Se abrirán varias pestañas de WhatsApp Web o wa.me. ¿Deseas continuar?')) return;
+      links.forEach((link, index) => {
+        window.setTimeout(() => window.open(link.href, '_blank', 'noopener'), index * 450);
+      });
+    }
+  </script>
+</body>
+</html>
