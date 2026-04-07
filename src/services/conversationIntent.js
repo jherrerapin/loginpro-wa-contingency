@@ -18,7 +18,9 @@ const NO_INTEREST_PATTERNS = [
   /\bmejor no\b/,
   /\bprefiero no\b/,
   /\bno deseo continuar\b/,
-  /\bpaso\b/
+  /\bno quiero seguir\b/,
+  /\bpaso\b/,
+  /\bdejemos asi\b/
 ];
 
 const DEFER_PATTERNS = [
@@ -26,7 +28,8 @@ const DEFER_PATTERNS = [
   /\bluego\b/,
   /\bmas tarde\b/,
   /\bahorita no\b/,
-  /\ben otro momento\b/
+  /\ben otro momento\b/,
+  /\bluego te escribo\b/
 ];
 
 const INFO_FIRST_PATTERNS = [
@@ -36,8 +39,8 @@ const INFO_FIRST_PATTERNS = [
   /\bantes quiero saber\b/,
   /\bprimero quiero saber\b/,
   /\bmas informacion\b/,
-  /\binformacion\b/,
-  /\binfo\b/
+  /\binfo\b/,
+  /\bcuentame primero\b/
 ];
 
 const OBJECTION_PATTERNS = [
@@ -46,11 +49,13 @@ const OBJECTION_PATTERNS = [
   /\bprimero dime\b/,
   /\bantes de darte mis datos\b/,
   /\bantes de enviar mis datos\b/,
-  /\bno quiero dar mis datos\b/
+  /\bno quiero dar mis datos\b/,
+  /\bnecesito saber primero\b/
 ];
 
 const ALREADY_SENT_PATTERNS = [
   /\bya envie eso\b/,
+  /\bya envie mi hv\b/,
   /\bya envi[eé] eso\b/,
   /\bya mande eso\b/,
   /\bya mand[eé] eso\b/,
@@ -64,9 +69,10 @@ const CHANGE_INTENT_PATTERNS = [
   /\botra vacante\b/,
   /\botro cargo\b/,
   /\bcambie de opinion\b/,
-  /\bcambi[eé] de opini[oó]n\b/,
+  /\bcambi[eé] de opinion\b/,
   /\bme interesa otra\b/,
-  /\bmejor esta otra\b/
+  /\bmejor esta otra\b/,
+  /\bquiero otra vacante\b/
 ];
 
 export function detectConversationIntent(text = '', options = {}) {
@@ -87,7 +93,7 @@ export function detectConversationIntent(text = '', options = {}) {
   if (CHANGE_INTENT_PATTERNS.some((pattern) => pattern.test(normalized))) return 'change_intent';
   if (/(hoja de vida|\bcv\b|curriculum)/.test(normalized)) return 'cv_intent';
   if (/(si|correcto|esta bien|todo correcto|todo bien|confirmo|de acuerdo|todo esta correcto|perfecto)/.test(normalized)) return 'confirmation_yes';
-  if (/(no|correccion|corrijo|me equivoque|equivocado|no es|cambiar|cambio|eso esta mal)/.test(normalized)) return 'confirmation_no_or_correction';
+  if (/(no|correccion|corrijo|me equivoque|equivocado|no es|cambiar|cambio|eso esta mal|quise decir|en realidad|mas bien)/.test(normalized)) return 'confirmation_no_or_correction';
   if (/(aplicar|postular|continuar|me interesa|quiero seguir|deseo continuar)/.test(normalized)) return 'apply_intent';
   if (/(que hacen|como funciona|cuando|donde|requisito|salario|pago|horario|entrevista|ubicacion|condiciones)/.test(normalized)) return 'faq';
   if (/(edad|cc|cedula|ti|ce|ppt|barrio|experiencia|restricciones|moto|bicicleta|transporte|nombre|localidad)/.test(normalized) || /\d{5,}/.test(normalized)) return 'provide_data';

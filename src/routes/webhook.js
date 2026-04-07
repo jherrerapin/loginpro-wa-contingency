@@ -550,12 +550,17 @@ async function buildEngineContext(prisma, candidate, inboundText = '', providedV
     where: { candidateId: candidate.id },
     orderBy: { createdAt: 'desc' },
     take: 8,
-    select: { direction: true, body: true },
+    select: { direction: true, body: true, rawPayload: true, createdAt: true },
   });
 
   const recentMessages = recentMessagesRaw
     .reverse()
-    .map((m) => ({ direction: m.direction, body: m.body || '' }));
+    .map((m) => ({
+      direction: m.direction,
+      body: m.body || '',
+      rawPayload: m.rawPayload || {},
+      createdAt: m.createdAt || null
+    }));
 
   const nextSlot = vacancy
     ? await resolveInterviewSlotContext(prisma, candidate, vacancy, inboundText)
@@ -609,6 +614,15 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
     options.debugTrace.engine_loop_guard = Boolean(engineResult.loopGuardApplied);
   }
 
+  if (engineResult.suppressed) {
+    console.warn('[ENGINE_SUPPRESSED]', JSON.stringify({
+      phone: candidate.phone,
+      candidateId: candidate.id,
+      reason: engineResult.suppressedReason || 'suppressed_without_reason'
+    }));
+    return true;
+  }
+
   if (engineResult.fallback) {
     if (options.debugTrace) {
       options.debugTrace.engine_fallback_used = true;
@@ -620,7 +634,13 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
       candidateId: candidate.id,
       reason: engineResult.fallbackReason || 'engine_returned_fallback'
     }));
-    return false;
+    const fallbackBody = engineResult.reply || 'Te lei, dame un momento y continuo contigo.';
+    await reply(prisma, candidate.id, from, fallbackBody, inboundText, {
+      body: fallbackBody,
+      source: 'engine_fallback',
+      reason: engineResult.fallbackReason || 'engine_returned_fallback'
+    });
+    return true;
   }
 
   const candidateAfterActions = await prisma.candidate.findUnique({ where: { id: candidate.id } }) || candidate;
