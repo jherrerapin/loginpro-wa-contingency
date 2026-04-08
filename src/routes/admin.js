@@ -18,7 +18,7 @@ import {
   normalizeCandidateStatusForUI
 } from '../services/candidateExport.js';
 import { sendTextMessage } from '../services/whatsapp.js';
-import { ConversationStep, MessageDirection, MessageType } from '@prisma/client';
+import { ConversationStep, MessageDirection, MessageType, Gender } from '@prisma/client';
 import { buildTechnicalOutboundCandidateUpdate } from '../services/adminOutboundPolicy.js';
 import { describeResumeBehavior } from '../services/botAutomationPolicy.js';
 import { listOfferableSlots, createBooking, cancelCandidateBookings } from '../services/interviewScheduler.js';
@@ -34,6 +34,11 @@ function normalizeString(value) {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normalizeGenderInput(value) {
+  const normalized = normalizeString(value)?.toUpperCase() || null;
+  return ['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'].includes(normalized) ? normalized : null;
 }
 
 function toSlug(value) {
@@ -363,6 +368,7 @@ function decorateDashboardCandidate(candidate) {
   return {
     ...normalizedCandidate,
     hasCv: candidateHasCv(normalizedCandidate),
+    isFemaleCandidate: normalizedCandidate?.gender === 'FEMALE',
     isFemaleHumanReview: isFemaleHumanReviewCandidate(normalizedCandidate),
     outboundWindowOpen,
     hasNewInbound: candidateHasUnreadInbound(normalizedCandidate),
@@ -1416,6 +1422,24 @@ export function adminRouter(prisma) {
     const { id } = req.params;
     const returnTo = safeAdminReturnPath(req.body.returnTo || '/admin');
     const raw = req.body;
+    const existingCandidate = await prisma.candidate.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        gender: true,
+        botPaused: true,
+        botPauseReason: true,
+        cvData: true,
+        cvOriginalName: true,
+        cvMimeType: true,
+        currentStep: true
+      }
+    });
+
+    if (!existingCandidate) {
+      return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
+    }
+
     const candidateCoreFields = normalizeCandidateFields({
       fullName:            normalizeString(raw.fullName),
       documentType:        normalizeString(raw.documentType),
@@ -1431,6 +1455,20 @@ export function adminRouter(prisma) {
     };
     const status = normalizeString(raw.status);
     if (status) adminStatusFields.status = status;
+    const gender = normalizeGenderInput(raw.gender);
+    if (gender) adminStatusFields.gender = gender;
+
+    if (gender === Gender.FEMALE) {
+      const hasCv = Boolean(existingCandidate.cvData || existingCandidate.cvOriginalName || existingCandidate.cvMimeType);
+      if (hasCv || [ConversationStep.ASK_CV, ConversationStep.DONE, ConversationStep.SCHEDULING, ConversationStep.SCHEDULED].includes(existingCandidate.currentStep)) {
+        adminStatusFields.botPaused = true;
+        adminStatusFields.botPausedAt = new Date();
+        adminStatusFields.botPausedBy = req.userRole || 'admin';
+        adminStatusFields.botPauseReason = 'Candidata femenina pendiente de revision humana';
+        adminStatusFields.reminderScheduledFor = null;
+        adminStatusFields.reminderState = 'SKIPPED';
+      }
+    }
 
     const data = { ...candidateCoreFields, ...adminStatusFields };
     await prisma.candidate.update({ where: { id }, data });

@@ -199,3 +199,9 @@ test('bloque con direccion no contamina la edad del candidato', () => {
   assert.equal(normalized.medicalRestrictions, 'Sin restricciones médicas');
   assert.equal(normalized.transportMode, 'Bicicleta');
 });
+
+test('detecta genero femenino explicito en el mensaje', () => {
+  const parsed = parseNaturalData('Soy mujer y estoy interesada en la vacante');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.gender, 'FEMALE');
+});

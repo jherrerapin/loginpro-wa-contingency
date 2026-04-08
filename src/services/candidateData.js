@@ -20,6 +20,14 @@ const BUS_VARIANTS = ['bus', 'buseta', 'transporte publico', 'transporte públic
 const INDEPENDENT_VARIANTS = ['independiente'];
 const LOCATION_STOPWORDS = /\b(cc|ti|ce|ppt|pasaporte|documento|cedula|cédula|ciudadania|ciudadanía|numero|número|edad|experiencia|experiencias|restriccion|restricciones|medica|medicas|salud|transporte|moto|motocicleta|bicicleta|bici|cicla|bicivleta|bivivleta|bisicleta|bus|nombre|hoja de vida|hv|cv|trabajo|trabajando|independiente|corrijo|cuento|sin|no|auxiliar|cargue|descargue|bodega|operativo|operativa|vacante|cargo|anuncio|turno|turnos|disponibilidad)\b/i;
 const ADDRESS_TOKENS = /^(?:calle|cl|carrera|cra|kr|avenida|av|autopista|diagonal|transversal|tv|km|kilometro|kilómetro|entrada|salida)$/i;
+const FEMALE_GENDER_PATTERNS = [
+  /\b(?:soy|me considero|sexo|genero|género)\s*(?:es|:)?\s*(?:mujer|femenina)\b/i,
+  /\b(?:candidata|senora|señora|senorita|señorita|embarazada)\b/i
+];
+const MALE_GENDER_PATTERNS = [
+  /\b(?:soy|me considero|sexo|genero|género)\s*(?:es|:)?\s*(?:hombre|masculino)\b/i,
+  /\b(?:candidato|senor|señor)\b/i
+];
 
 function looksLikeJobRoleChunk(value = '') {
   const normalized = normalizeLooseText(value);
@@ -118,6 +126,14 @@ function detectTransportFromSequence(text = '') {
     }
   }
 
+  return null;
+}
+
+function detectExplicitGender(text = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  if (FEMALE_GENDER_PATTERNS.some((pattern) => pattern.test(raw))) return 'FEMALE';
+  if (MALE_GENDER_PATTERNS.some((pattern) => pattern.test(raw))) return 'MALE';
   return null;
 }
 
@@ -425,6 +441,9 @@ export function parseNaturalData(text = '') {
   const compact = String(text || '').replace(/\n/g, ', ').replace(/\s+/g, ' ').trim();
   let remaining = String(text || '');
 
+  const explicitGender = detectExplicitGender(compact);
+  if (explicitGender) result.gender = explicitGender;
+
   const docRegex = /\b(c\.?\s*c\.?|c[ée]dula(?:\s+(?:de\s+)?ciudadan[ií]a)?|t\.?\s*i\.?|tarjeta\s+de\s+identidad|c\.?\s*e\.?|c[ée]dula\s+de\s+extranjer[íi]a|pasaporte|ppt)\s*(?:es|:|\-|#|,|\.|\s)+\s*(\d{6,12})\b/i;
   const docMatch = compact.match(docRegex) || remaining.match(docRegex);
   if (docMatch) {
@@ -557,6 +576,10 @@ export function normalizeCandidateFields(fields = {}) {
   if (fields.transportMode) normalized.transportMode = normalizeTransportMode(fields.transportMode);
   if (fields.experienceInfo) normalized.experienceInfo = normalizeExperienceInfo(fields.experienceInfo) || capitalizeWords(fields.experienceInfo);
   if (fields.experienceTime) normalized.experienceTime = normalizeExperienceDuration(fields.experienceTime);
+  if (fields.gender) {
+    const gender = String(fields.gender).trim().toUpperCase();
+    if (['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'].includes(gender)) normalized.gender = gender;
+  }
 
   return normalized;
 }
@@ -578,6 +601,7 @@ export function isHighConfidenceLocalField(field, value) {
   if (field === 'transportMode') {
     return /^(moto|motocicleta|bicicleta|bici|cicla|bicivleta|bivivleta|bisicleta|carro|automovil|automóvil|vehiculo|vehículo|bus|buseta|transporte publico|transporte público|servicio publico|servicio público|independiente|sin medio de transporte|no tiene|no tengo)$/i.test(raw);
   }
+  if (field === 'gender') return /^(male|female|other)$/i.test(raw);
   if (field === 'experienceInfo') return /^(si|sí|no)$/i.test(raw);
   if (field === 'experienceTime') return /\d+\s*(mes|meses|ano|años|anos|semanas?)/i.test(normalizeLooseText(raw));
   return true;
