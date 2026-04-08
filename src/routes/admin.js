@@ -30,6 +30,8 @@ import { buildTechnicalOutboundCandidateUpdate } from '../services/adminOutbound
 import { describeResumeBehavior } from '../services/botAutomationPolicy.js';
 import { listOfferableSlots, createBooking, cancelCandidateBookings } from '../services/interviewScheduler.js';
 import { getReminderMissingItems } from '../services/reminder.js';
+import { clearCandidateCvStorage, resolveCandidateCvBuffer, storeCandidateCv } from '../services/cvStorage.js';
+import { isStorageConfigured } from '../services/storage.js';
 
 function sessionAuth(req, res, next) {
   const role = req.session?.userRole;
@@ -556,7 +558,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
               age: true, neighborhood: true, locality: true, zone: true, status: true,
               medicalRestrictions: true, transportMode: true,
               interviewNotes: true,
-              cvOriginalName: true, cvMimeType: true, gender: true,
+      cvOriginalName: true, cvMimeType: true, cvStorageKey: true, gender: true,
               botPaused: true, botPauseReason: true,
               currentStep: true,
               lastInboundAt: true,
@@ -576,7 +578,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
           age: true, neighborhood: true, locality: true, zone: true, status: true,
           medicalRestrictions: true, transportMode: true,
           interviewNotes: true,
-          cvOriginalName: true, cvMimeType: true,
+          cvOriginalName: true, cvMimeType: true, cvStorageKey: true,
           gender: true, createdAt: true,
           botPaused: true, botPauseReason: true,
           currentStep: true,
@@ -606,7 +608,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
         age: true, neighborhood: true, locality: true, zone: true, status: true,
         medicalRestrictions: true, transportMode: true,
         interviewNotes: true,
-        cvOriginalName: true, cvMimeType: true, createdAt: true,
+        cvOriginalName: true, cvMimeType: true, cvStorageKey: true, createdAt: true,
         gender: true, botPaused: true, botPauseReason: true,
         currentStep: true,
         lastInboundAt: true,
@@ -854,6 +856,60 @@ async function fetchMonitorMessages(prisma) {
   });
 }
 
+async function loadBotChatCount(prisma) {
+  return prisma.candidate.count({
+    where: {
+      messages: {
+        some: {}
+      }
+    }
+  });
+}
+
+async function loadPendingCvMigrationCount(prisma) {
+  return prisma.candidate.count({
+    where: {
+      cvData: { not: null },
+      cvStorageKey: null
+    }
+  });
+}
+
+async function migrateCandidateCvBatch(prisma, limit = 50) {
+  const candidates = await prisma.candidate.findMany({
+    where: {
+      cvData: { not: null },
+      cvStorageKey: null
+    },
+    select: {
+      id: true,
+      cvData: true,
+      cvMimeType: true,
+      cvOriginalName: true
+    },
+    take: limit,
+    orderBy: { createdAt: 'asc' }
+  });
+
+  let migrated = 0;
+  let failed = 0;
+
+  for (const candidate of candidates) {
+    try {
+      await storeCandidateCv(prisma, candidate.id, normalizeBinaryData(candidate.cvData), {
+        mimeType: candidate.cvMimeType || 'application/octet-stream',
+        originalName: candidate.cvOriginalName || 'hoja_de_vida'
+      });
+      migrated += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[CV_STORAGE_MIGRATION_FAILED]', candidate.id, error);
+    }
+  }
+
+  return { found: candidates.length, migrated, failed };
+}
+
 export function adminRouter(prisma) {
   const router = express.Router();
   const cvUpload = multer({
@@ -870,6 +926,7 @@ export function adminRouter(prisma) {
     const vacancyFiltersById = normalizeVacancyDashboardFilters(req.query);
     const candidateSearch = normalizeCandidateSearch(req.query);
     const vacancySearchById = normalizeVacancySearches(req.query);
+    const botChatCount = await loadBotChatCount(prisma);
     const canUseLegacyScope = requestedStatus
       && ADMIN_STATUS_SCOPES.has(requestedStatus)
       && (req.userRole === 'dev' || RECRUITER_STATUS_SCOPES.has(requestedStatus));
@@ -896,6 +953,7 @@ export function adminRouter(prisma) {
           createdAt: true,
           cvMimeType: true,
           cvOriginalName: true,
+          cvStorageKey: true,
           gender: true,
           botPaused: true,
           botPauseReason: true,
@@ -939,6 +997,7 @@ export function adminRouter(prisma) {
         isFemaleHumanReviewCandidate,
         adminFilters,
         candidateSearch,
+        botChatCount,
         vacancyFiltersById: {},
         vacancySearchById: {}
       });
@@ -962,6 +1021,7 @@ export function adminRouter(prisma) {
       successMsg: normalizeString(req.query.success),
       errorMsg: normalizeString(req.query.error),
       isFemaleHumanReviewCandidate,
+      botChatCount,
       adminFilters,
       candidateSearch: null,
       vacancyFiltersById,
@@ -1021,8 +1081,9 @@ export function adminRouter(prisma) {
         rejectionReason: true,
         rejectionDetails: true,
         createdAt: true,
-        cvMimeType: true,
-        cvOriginalName: true,
+          cvMimeType: true,
+          cvOriginalName: true,
+          cvStorageKey: true,
         vacancy: { select: { city: true } }
       }
     });
@@ -1275,6 +1336,7 @@ export function adminRouter(prisma) {
     const detailCandidate = {
       ...normalizeCandidateSnapshot(candidate),
       interviewBookings: normalizeInterviewBookings(candidate.interviewBookings || []),
+      hasCv: candidateHasCv(candidate),
       outboundWindowOpen: outboundWindow?.isOpen ?? (
         Boolean(candidate.lastInboundAt)
         && (Date.now() - new Date(candidate.lastInboundAt).getTime()) <= WHATSAPP_WINDOW_MS
@@ -1622,7 +1684,7 @@ export function adminRouter(prisma) {
 
     const candidate = await prisma.candidate.findUnique({
       where: { id },
-      select: { id: true, fullName: true }
+      select: { id: true, fullName: true, cvStorageKey: true }
     });
 
     if (!candidate) {
@@ -1643,6 +1705,8 @@ export function adminRouter(prisma) {
       });
     });
 
+    await clearCandidateCvStorage(candidate);
+
     const candidateLabel = candidate.fullName || 'el candidato';
     return res.redirect(withFlashMessage(returnTo, 'success', `Se eliminó ${candidateLabel} correctamente.`));
   });
@@ -1661,6 +1725,7 @@ export function adminRouter(prisma) {
         cvData: true,
         cvOriginalName: true,
         cvMimeType: true,
+        cvStorageKey: true,
         currentStep: true,
         vacancy: { select: { city: true } }
       }
@@ -1694,7 +1759,7 @@ export function adminRouter(prisma) {
     if (req.userRole === 'dev') adminStatusFields.interviewNotes = normalizeString(raw.interviewNotes);
 
     if (canEditGender && gender === Gender.FEMALE) {
-      const hasCv = Boolean(existingCandidate.cvData || existingCandidate.cvOriginalName || existingCandidate.cvMimeType);
+      const hasCv = candidateHasCv(existingCandidate);
       if (hasCv || [ConversationStep.ASK_CV, ConversationStep.DONE, ConversationStep.SCHEDULING, ConversationStep.SCHEDULED].includes(existingCandidate.currentStep)) {
         adminStatusFields.botPaused = true;
         adminStatusFields.botPausedAt = new Date();
@@ -1746,8 +1811,9 @@ export function adminRouter(prisma) {
   // ── CV: descargar ────────────────────────────────────────────
   router.get('/candidates/:id/cv', async (req, res) => {
     const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
-    if (!candidate?.cvData) return res.status(404).send('CV no encontrado.');
-    const buffer = normalizeBinaryData(candidate.cvData);
+    if (!candidateHasCv(candidate)) return res.status(404).send('CV no encontrado.');
+    const buffer = await resolveCandidateCvBuffer(candidate);
+    if (!buffer) return res.status(404).send('CV no encontrado.');
     const mime = candidate.cvMimeType || 'application/octet-stream';
     const filename = candidate.cvOriginalName || 'hoja_de_vida';
     res.setHeader('Content-Type', mime);
@@ -1783,23 +1849,29 @@ export function adminRouter(prisma) {
     if (shouldValidatePdfSignature(file.originalname, file.mimetype) && !hasPdfSignature(buffer)) {
       return res.redirect(`/admin/candidates/${id}?` + buildCvStatusQuery('cvError', 'El archivo PDF parece estar corrupto o no es un PDF válido.'));
     }
-    await prisma.candidate.update({
+    const existingCandidate = await prisma.candidate.findUnique({
       where: { id },
-      data: {
-        cvData: buffer,
-        cvMimeType: file.mimetype || 'application/octet-stream',
-        cvOriginalName: file.originalname || 'hoja_de_vida'
-      }
+      select: { id: true, cvStorageKey: true }
+    });
+    await storeCandidateCv(prisma, id, buffer, {
+      currentCvStorageKey: existingCandidate?.cvStorageKey || null,
+      mimeType: file.mimetype || 'application/octet-stream',
+      originalName: file.originalname || 'hoja_de_vida'
     });
     res.redirect(`/admin/candidates/${id}?` + buildCvStatusQuery('cvSuccess', 'Hoja de vida actualizada correctamente.'));
   });
 
   // ── CV: eliminar ─────────────────────────────────────────────
   router.post('/candidates/:id/cv/delete', async (req, res) => {
+    const candidate = await prisma.candidate.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, cvStorageKey: true }
+    });
     await prisma.candidate.update({
       where: { id: req.params.id },
-      data: { cvData: null, cvMimeType: null, cvOriginalName: null }
+      data: { cvData: null, cvMimeType: null, cvOriginalName: null, cvStorageKey: null }
     });
+    await clearCandidateCvStorage(candidate || {});
     res.redirect(`/admin/candidates/${req.params.id}?` + buildCvStatusQuery('cvSuccess', 'Hoja de vida eliminada.'));
   });
 
@@ -1887,7 +1959,7 @@ export function adminRouter(prisma) {
 
   // ── CRUD de vacantes ─────────────────────────────────────────
   router.get('/vacancies', async (req, res) => {
-    const [vacancies, operations] = await Promise.all([
+    const [vacancies, operations, pendingCvMigrationCount] = await Promise.all([
       prisma.vacancy.findMany({
         orderBy: [{ city: 'asc' }, { title: 'asc' }],
         include: {
@@ -1900,11 +1972,30 @@ export function adminRouter(prisma) {
           }
         }
       }),
-      loadOperations(prisma)
+      loadOperations(prisma),
+      req.userRole === 'dev' ? loadPendingCvMigrationCount(prisma) : 0
     ]);
     const successMsg = normalizeString(req.query.success);
     const errorMsg   = normalizeString(req.query.error);
-    res.render('vacancies', { vacancies, operations, role: req.userRole, successMsg, errorMsg });
+    res.render('vacancies', { vacancies, operations, role: req.userRole, successMsg, errorMsg, pendingCvMigrationCount, storageConfigured: isStorageConfigured() });
+  });
+
+  router.post('/storage/migrate-cvs', ensureDevRole, async (_req, res) => {
+    try {
+      if (!isStorageConfigured()) {
+        return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Configura R2 antes de migrar las hojas de vida fuera de PostgreSQL.'));
+      }
+      const result = await migrateCandidateCvBatch(prisma, 100);
+      if (!result.found) {
+        return res.redirect('/admin/vacancies?success=' + encodeURIComponent('No hay hojas de vida pendientes por migrar.'));
+      }
+
+      const suffix = result.failed ? ` ${result.failed} fallaron.` : '';
+      return res.redirect('/admin/vacancies?success=' + encodeURIComponent(`Migración ejecutada. ${result.migrated} hoja(s) de vida migradas.${suffix}`));
+    } catch (error) {
+      console.error('[CV_STORAGE_MIGRATION_ROUTE_FAILED]', error);
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('No fue posible migrar las hojas de vida en este momento.'));
+    }
   });
 
   router.post('/vacancies/create', express.urlencoded({ extended: true }), async (req, res) => {

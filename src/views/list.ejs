@@ -63,6 +63,40 @@
     .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
     .page-header h1 { font-size: 20px; font-weight: 700; color: var(--navy); }
     .page-header .sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+    .header-metrics {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .metric-pill {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 180px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+    }
+    .metric-pill-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--text-faint);
+    }
+    .metric-pill-value {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--navy);
+    }
+    .metric-pill-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
     .alert {
       padding: 10px 14px; border-radius: var(--radius); margin-bottom: 16px;
       font-size: 13px; font-weight: 600; border: 1px solid transparent;
@@ -512,6 +546,11 @@
       <h1>Panel de Reclutamiento</h1>
       <p class="sub">Vista por estado de candidato</p>
     </div>
+    <div class="metric-pill">
+      <span class="metric-pill-label">Chats acumulados</span>
+      <span class="metric-pill-value"><%= botChatCount || 0 %></span>
+      <span class="metric-pill-sub">conversaciones registradas por el bot</span>
+    </div>
     <a href="/admin" style="font-size:13px;color:var(--teal);font-weight:600;text-decoration:none;">← Ver por vacante</a>
   </div>
 
@@ -716,6 +755,11 @@
     <div>
       <h1>Panel de Reclutamiento</h1>
       <p class="sub">Vista por ciudad y vacante</p>
+    </div>
+    <div class="metric-pill">
+      <span class="metric-pill-label">Chats acumulados</span>
+      <span class="metric-pill-value"><%= botChatCount || 0 %></span>
+      <span class="metric-pill-sub">conversaciones registradas por el bot</span>
     </div>
 
     <form method="get" action="/admin" id="dateForm" style="display:contents;">

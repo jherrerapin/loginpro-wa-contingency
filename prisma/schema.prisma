@@ -226,6 +226,7 @@ model Candidate {
 
   cvOriginalName           String?
   cvMimeType               String?
+  cvStorageKey             String?
   cvData                   Bytes?
 
   multilineWindowUntil     DateTime?

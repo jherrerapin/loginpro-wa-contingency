@@ -30,7 +30,8 @@ export function candidateLastMessageDirection(candidate = {}) {
 }
 
 export function candidateHasCv(candidate = {}) {
-  return Boolean(candidate.cvData)
+  return Boolean(candidate.cvStorageKey)
+    || Boolean(candidate.cvData)
     || hasValue(candidate.cvOriginalName)
     || hasValue(candidate.cvMimeType);
 }

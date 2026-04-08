@@ -21,6 +21,7 @@ import { conversationUnderstanding } from '../services/conversationUnderstanding
 import { shouldBlockAutomation } from '../services/botAutomationPolicy.js';
 import { runChatEngine } from '../services/chatEngine.js';
 import { think, extractEngineCandidateFields } from '../services/conversationEngine.js';
+import { storeCandidateCv } from '../services/cvStorage.js';
 import { findActiveVacancies, findAllVacancies, normalizeResolverText, resolveVacancyFromText } from '../services/vacancyResolver.js';
 import { cancelCandidateBookings, createBooking, formatInterviewDate, getNextAvailableSlot, getNextAvailableSlotAfter, getInterviewReminderAt, hydrateOfferedSlot } from '../services/interviewScheduler.js';
 import { generateBookingConfirmation, generateInterviewOffer } from '../services/naturalReply.js';
@@ -211,7 +212,7 @@ function containsCandidateData(text, parsedData = null) {
     : parseNaturalData(text);
   return hasMeaningfulCandidateData(candidateData);
 }
-function hasHv(candidate) { return Boolean(candidate?.cvData); }
+function hasHv(candidate) { return Boolean(candidate?.cvStorageKey || candidate?.cvData || candidate?.cvOriginalName || candidate?.cvMimeType); }
 function resolveInboundMessageType(message = {}) {
   if (message.type === 'text') return MessageType.TEXT;
   if (message.type === 'document') return MessageType.DOCUMENT;
@@ -1636,13 +1637,9 @@ export function webhookRouter(prisma) {
               try {
                 const metadata = await fetchMediaMetadata(message.document.id);
                 const cvBuffer = await downloadMedia(metadata.url);
-                await prisma.candidate.update({
-                  where: { id: candidate.id },
-                  data: {
-                    cvData: cvBuffer,
-                    cvMimeType: mimeType || null,
-                    cvOriginalName: filename
-                  }
+                await storeCandidateCv(prisma, candidate.id, cvBuffer, {
+                  mimeType: mimeType || null,
+                  originalName: filename
                 });
                 debugTrace.cv_saved = true;
                 console.log('[CV_TRACE]', JSON.stringify({ phone: from, filename, mimeType }));
@@ -1714,5 +1711,4 @@ export function webhookRouter(prisma) {
 
   return router;
 }
-
 

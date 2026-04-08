@@ -153,7 +153,14 @@
       <h1>Gestión de Vacantes</h1>
       <p class="sub"><%= vacancies.length %> vacante<%= vacancies.length !== 1 ? 's' : '' %> registrada<%= vacancies.length !== 1 ? 's' : '' %></p>
     </div>
-    <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <% if (role === 'dev') { %>
+        <form method="post" action="/admin/storage/migrate-cvs" onsubmit="return confirm('Esto moverá hojas de vida guardadas en base de datos hacia almacenamiento externo, sin perder acceso a descarga. ¿Continuar?');">
+          <button type="submit" class="btn btn-secondary" <%= storageConfigured ? '' : 'disabled title=\"Configura R2 para ejecutar la migración\"' %>>Migrar HV almacenadas<% if (pendingCvMigrationCount) { %> (<%= pendingCvMigrationCount %>)<% } %></button>
+        </form>
+      <% } %>
+      <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
+    </div>
   </div>
 
   <% if (successMsg) { %><div class="alert alert-success">✅ <%= successMsg %></div><% } %>
