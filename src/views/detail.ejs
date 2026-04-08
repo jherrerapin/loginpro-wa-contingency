@@ -60,6 +60,11 @@
       padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
       background: #fef3c7; color: #92400e;
     }
+    .badge-female {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: #fce7f3; color: #be185d;
+    }
     .booking-list { display: grid; gap: 12px; }
     .booking-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; background: #fafafa; }
     .booking-manual {
@@ -107,6 +112,9 @@
     <a href="<%= returnToPath || '/admin' %>" class="back-link">&larr; Volver al listado</a>
     <div class="header-line">
       <h1><%= candidate.fullName || 'Candidato sin nombre' %></h1>
+      <% if (candidate.gender === 'FEMALE') { %>
+        <span class="badge-female">Candidata femenina</span>
+      <% } %>
       <% if (isFemaleHumanReviewCandidate(candidate)) { %>
         <span class="badge-human-review">Revisión humana candidata femenina</span>
       <% } %>
@@ -467,6 +475,15 @@
           <div class="field-group">
             <label for="age">Edad</label>
             <input id="age" name="age" type="number" min="0" value="<%= candidate.age ?? '' %>" />
+          </div>
+          <div class="field-group">
+            <label for="gender">Género</label>
+            <select id="gender" name="gender">
+              <option value="UNKNOWN" <%= candidate.gender === 'UNKNOWN' || !candidate.gender ? 'selected' : '' %>>No definido</option>
+              <option value="FEMALE" <%= candidate.gender === 'FEMALE' ? 'selected' : '' %>>Mujer</option>
+              <option value="MALE" <%= candidate.gender === 'MALE' ? 'selected' : '' %>>Hombre</option>
+              <option value="OTHER" <%= candidate.gender === 'OTHER' ? 'selected' : '' %>>Otro</option>
+            </select>
           </div>
           <div class="field-group">
             <label for="neighborhood">Barrio</label>

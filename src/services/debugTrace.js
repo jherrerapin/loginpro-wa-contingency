@@ -3,6 +3,7 @@ const CANDIDATE_FIELDS = [
   'documentType',
   'documentNumber',
   'age',
+  'gender',
   'neighborhood',
   'locality',
   'medicalRestrictions',
@@ -174,6 +175,8 @@ function isIncompleteFieldValue(field, value) {
       const age = Number.parseInt(normalized, 10);
       return !Number.isFinite(age) || age < 14 || age > 80;
     }
+    case 'gender':
+      return ['unknown', 'pendiente'].includes(normalized);
     case 'transportMode':
       return ['ninguno', 'ninguna', 'sin', 'transporte'].includes(normalized);
     case 'medicalRestrictions':
@@ -209,6 +212,8 @@ function canConsolidateField(field, currentValue, nextValue) {
       return currentNormalized.length < nextNormalized.length && nextNormalized.includes(currentNormalized);
     case 'age':
       return false;
+    case 'gender':
+      return currentNormalized === 'unknown' && ['female', 'male', 'other'].includes(nextNormalized);
     case 'transportMode':
       return currentNormalized === 'sin medio de transporte' && nextNormalized !== 'sin medio de transporte';
     case 'medicalRestrictions':

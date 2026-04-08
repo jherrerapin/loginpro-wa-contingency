@@ -154,6 +154,7 @@
     .badge-contactado { background: var(--purple-light); color: var(--purple); }
     .badge-rechazado  { background: var(--red-light);    color: var(--red); }
     .badge-human-review { background: #fef3c7; color: #92400e; }
+    .badge-female { background: #fce7f3; color: #be185d; border: 1px solid #f9a8d4; }
     .badge-unread { background: #dbeafe; color: #1d4ed8; }
 
     .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
@@ -218,6 +219,11 @@
       transition: background .12s;
     }
     .candidate-row:hover { background: var(--surface-2); }
+    .candidate-row-female {
+      background: linear-gradient(90deg, #fff1f7 0%, #ffffff 55%);
+      border: 1px solid #fbcfe8;
+    }
+    .candidate-row-female:hover { background: #fde7f3; }
     .candidate-name { font-weight: 600; color: var(--navy); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .candidate-doc  { font-size: 12px; color: var(--text-muted); }
     .candidate-extra { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
@@ -281,6 +287,9 @@
     .legacy-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
     .legacy-table tr:last-child td { border-bottom: none; }
     .legacy-table tr:hover td { background: var(--surface-2); }
+    .legacy-table tr.legacy-row-female td { background: #fff5fa; }
+    .legacy-table tr.legacy-row-female:hover td { background: #fde7f3; }
+    .bookings-table tr.row-female td { background: #fff7fb; }
 
     /* ── Export bar ── */
     .export-bar {
@@ -383,6 +392,10 @@
     if (!timestamp) return 'Sin mensajes';
     const direction = candidate.lastMessageDirection === 'OUTBOUND' ? 'saliente' : 'entrante';
     return 'Último mensaje ' + direction + ': ' + formatDateTimeCO(timestamp);
+  }
+
+  function isFemaleCandidate(candidate) {
+    return candidate?.gender === 'FEMALE' || candidate?.isFemaleCandidate;
   }
 
   function candidateFilterValue(candidate, field) {
@@ -495,10 +508,15 @@
         <% const uiStatus = normalizeCandidateStatusForUI(c.status); %>
         <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', APROBADO:'badge-aprobado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado' }; %>
         <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', APROBADO:'Aprobado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado' }; %>
-        <tr>
+        <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
           <td><%= formatDateTimeCO(c.createdAt) %></td>
           <td style="font-weight:600;">
             <%= c.fullName || '—' %>
+            <% if (isFemaleCandidate(c)) { %>
+              <div class="candidate-flags">
+                <span class="badge badge-female"><%= (c.isFemaleHumanReview || isFemaleHumanReviewCandidate(c)) ? 'Candidata femenina' : 'Mujer' %></span>
+              </div>
+            <% } %>
             <% if (c.isFemaleHumanReview || isFemaleHumanReviewCandidate(c)) { %>
               <div class="candidate-flags">
                 <span class="badge badge-human-review">Revisión humana</span>
@@ -773,10 +791,15 @@
                 <tbody>
                   <% for (const b of filteredBookingsToday) { %>
                     <% const bs = bookingStatusLabel[b.status] || { cls: '', icon: '•', text: b.status }; %>
-                    <tr>
+                    <tr class="<%= isFemaleCandidate(b.candidate) ? 'row-female' : '' %>">
                       <td><span class="time-pill"><%= b.formattedTime %></span></td>
                       <td>
                         <div style="font-weight:600;color:var(--navy);"><%= b.candidate.fullName || '—' %></div>
+                        <% if (isFemaleCandidate(b.candidate)) { %>
+                          <div class="candidate-flags">
+                            <span class="badge badge-female"><%= b.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                          </div>
+                        <% } %>
                         <% if (b.isFemaleHumanReview) { %>
                           <div class="candidate-flags">
                             <span class="badge badge-human-review">Revisión humana</span>
@@ -823,9 +846,14 @@
               <% for (const c of filteredRegisteredNoBooking.slice(0, 20)) { %>
                 <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
                 <% const stBadge = candidateStatusBadge[uiSt] || { cls: 'badge-nuevo', label: uiSt }; %>
-                <div class="candidate-row">
+                <div class="candidate-row <%= isFemaleCandidate(c) ? 'candidate-row-female' : '' %>">
                   <div>
                     <div class="candidate-name"><%= c.fullName || 'Sin nombre' %></div>
+                    <% if (isFemaleCandidate(c)) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                      </div>
+                    <% } %>
                     <% if (c.isFemaleHumanReview) { %>
                       <div class="candidate-flags">
                         <span class="badge badge-human-review">Revisión humana</span>
@@ -868,9 +896,14 @@
               <% for (const c of filteredCompleteWithoutCv.slice(0, 20)) { %>
                 <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
                 <% const stBadge = candidateStatusBadge[uiSt] || { cls: 'badge-nuevo', label: uiSt }; %>
-                <div class="candidate-row">
+                <div class="candidate-row <%= isFemaleCandidate(c) ? 'candidate-row-female' : '' %>">
                   <div>
                     <div class="candidate-name"><%= c.fullName || 'Sin nombre' %></div>
+                    <% if (isFemaleCandidate(c)) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                      </div>
+                    <% } %>
                     <% if (c.isFemaleHumanReview) { %>
                       <div class="candidate-flags">
                         <span class="badge badge-human-review">Revisión humana</span>
@@ -918,9 +951,14 @@
                 <% for (const c of filteredRegisteredComplete.slice(0, 25)) { %>
                   <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
                   <% const stBadge = candidateStatusBadge[uiSt] || { cls: 'badge-nuevo', label: uiSt }; %>
-                  <div class="candidate-row">
+                  <div class="candidate-row <%= isFemaleCandidate(c) ? 'candidate-row-female' : '' %>">
                     <div>
                       <div class="candidate-name"><%= c.fullName || 'Sin nombre' %></div>
+                      <% if (isFemaleCandidate(c)) { %>
+                        <div class="candidate-flags">
+                          <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                        </div>
+                      <% } %>
                       <% if (c.isFemaleHumanReview) { %>
                         <div class="candidate-flags">
                           <span class="badge badge-human-review">Revisión humana</span>
@@ -964,9 +1002,14 @@
               <% for (const c of filteredCompleteWithoutCv.slice(0, 25)) { %>
                 <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
                 <% const stBadge = candidateStatusBadge[uiSt] || { cls: 'badge-nuevo', label: uiSt }; %>
-                <div class="candidate-row">
+                <div class="candidate-row <%= isFemaleCandidate(c) ? 'candidate-row-female' : '' %>">
                   <div>
                     <div class="candidate-name"><%= c.fullName || 'Sin nombre' %></div>
+                    <% if (isFemaleCandidate(c)) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                      </div>
+                    <% } %>
                     <% if (c.isFemaleHumanReview) { %>
                       <div class="candidate-flags">
                         <span class="badge badge-human-review">Revisión humana</span>
@@ -1038,9 +1081,14 @@
         <% for (const c of legacyCandidates.slice(0, 10)) { %>
           <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
           <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, APROBADO:{cls:'badge-aprobado',label:'Aprobado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'} }; %>
-          <tr>
+          <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
             <td style="font-weight:600;">
               <%= c.fullName || '—' %>
+              <% if (isFemaleCandidate(c)) { %>
+                <div class="candidate-flags">
+                  <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                </div>
+              <% } %>
               <% if (c.isFemaleHumanReview) { %>
                 <div class="candidate-flags">
                   <span class="badge badge-human-review">Revisión humana</span>
