@@ -85,7 +85,7 @@ export function buildCandidateStateForModel(candidate = {}, vacancy = null, rece
     UNKNOWN: 'No determinado'
   }[candidate.gender] ?? 'No determinado';
 
-  const hasCv = Boolean(candidate.cvData || candidate.cvOriginalName || candidate.cvMimeType);
+  const hasCv = Boolean(candidate.cvStorageKey || candidate.cvData || candidate.cvOriginalName || candidate.cvMimeType);
   const coreDataComplete = getCoreFieldGaps(candidate, vacancy).length === 0;
   const residenceConfig = getResidenceFieldConfig(vacancy || candidate?.vacancy);
   const residenceValue = getCandidateResidenceValue(candidate, vacancy || candidate?.vacancy);
@@ -616,7 +616,7 @@ export async function act({ actions, candidate, extractedFields = {}, candidateF
   const candidateAfterMerge = { ...candidate, ...persistedFields };
   const coreFieldGapsAfterMerge = getCoreFieldGaps(candidateAfterMerge);
   const hasNewCoreData = Object.keys(persistedFields).some((field) => CORE_PROFILE_FIELDS.includes(field));
-  const hasCvAfterMerge = Boolean(candidateAfterMerge.cvData || candidateAfterMerge.cvOriginalName || candidateAfterMerge.cvMimeType);
+  const hasCvAfterMerge = Boolean(candidateAfterMerge.cvStorageKey || candidateAfterMerge.cvData || candidateAfterMerge.cvOriginalName || candidateAfterMerge.cvMimeType);
 
   if (Object.keys(persistedFields).length) {
     await prisma.candidate.update({

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  candidateHasCv,
   deriveCandidateStatusForUI,
   exportFilenameByScope,
   filterCandidatesByScope,
@@ -32,6 +33,11 @@ test('registered operativo exige campos completos + CV + no rechazado', () => {
   assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'RECHAZADO' }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'CONTACTADO' }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, transportMode: '' }), false);
+});
+
+test('candidateHasCv reconoce hojas de vida migradas a almacenamiento externo', () => {
+  assert.equal(candidateHasCv({ cvStorageKey: 'candidates/demo/cv/file.pdf' }), true);
+  assert.equal(candidateHasCv({ cvStorageKey: null, cvData: null, cvOriginalName: null, cvMimeType: null }), false);
 });
 
 test('legacy VALIDANDO se normaliza a REGISTRADO y APROBADO se mantiene visible', () => {

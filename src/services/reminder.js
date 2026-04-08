@@ -38,7 +38,7 @@ export function getReminderMissingItems(candidate = {}) {
     ))
     .map(([, label]) => label);
 
-  const missingHv = !hasValue(candidate?.cvData);
+  const missingHv = !hasValue(candidate?.cvStorageKey) && !hasValue(candidate?.cvData);
   return { missingFields, missingHv };
 }
 

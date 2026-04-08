@@ -221,7 +221,7 @@
         </div>
       </div>
       <a href="<%= whatsappHref %>" <%= role === 'dev' ? '' : 'target="_blank"' %> class="btn-wa">Escribir por WhatsApp</a>
-      <% if (candidate.cvData) { %>
+      <% if (candidate.hasCv) { %>
         <a href="/admin/candidates/<%= candidate.id %>/cv" class="btn-cv">Descargar Hoja de Vida</a>
       <% } %>
     </div>
@@ -411,7 +411,7 @@
           </div>
         </div>
       <% } %>
-      <% if (!candidate.cvData) { %>
+      <% if (!candidate.hasCv) { %>
         <p style="margin-bottom:10px;"><%= role === 'dev' ? 'Este candidato no tiene hoja de vida cargada.' : 'Aún no hay una hoja de vida cargada para este candidato.' %></p>
         <form method="post" action="/admin/candidates/<%= candidate.id %>/cv/upload" enctype="multipart/form-data" class="inline-upload">
           <input type="file" name="cvFile" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
