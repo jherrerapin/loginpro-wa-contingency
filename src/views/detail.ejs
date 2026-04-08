@@ -380,7 +380,7 @@
                     <button type="submit" class="action-btn <%= action.cls %>" <%= booking.status === action.status ? 'disabled' : '' %>><%= action.label %></button>
                   </form>
                 <% } %>
-                <% if (role === 'dev') { %>
+                <% if (String(role) === 'dev') { %>
                   <form method="post" action="/admin/interviews/<%= booking.id %>/delete" onsubmit="return confirm('¿Seguro que deseas eliminar este agendamiento? Esta acción no se puede deshacer.');">
                     <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
                     <button type="submit" class="action-btn action-btn-danger">Eliminar agendamiento</button>
@@ -452,7 +452,7 @@
         <% } %>
         <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
           <input type="hidden" name="action" value="request_missing_data" />
-          <button type="submit">Solicitar datos faltantes</button>
+          <button type="submit">Solicitar datos pendientes</button>
         </form>
         <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
           <input type="hidden" name="action" value="request_hv" />

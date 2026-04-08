@@ -29,6 +29,7 @@ import { ConversationStep, MessageDirection, MessageType, Gender } from '@prisma
 import { buildTechnicalOutboundCandidateUpdate } from '../services/adminOutboundPolicy.js';
 import { describeResumeBehavior } from '../services/botAutomationPolicy.js';
 import { listOfferableSlots, createBooking, cancelCandidateBookings } from '../services/interviewScheduler.js';
+import { getReminderMissingItems } from '../services/reminder.js';
 
 function sessionAuth(req, res, next) {
   const role = req.session?.userRole;
@@ -100,6 +101,19 @@ function buildManualVacancyInfoMessage(vacancy) {
   );
 
   return lines.filter(Boolean).join('\n\n');
+}
+
+function formatHumanList(items = []) {
+  if (!items.length) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} y ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
+}
+
+function buildMissingDataRequestMessage(candidate) {
+  const { missingFields } = getReminderMissingItems(candidate);
+  if (!missingFields.length) return null;
+  return `Hola 👋 Para continuar con tu postulación, por favor envíame ${formatHumanList(missingFields)}.`;
 }
 
 function normalizeCandidateSearch(source = {}) {
@@ -1785,7 +1799,16 @@ export function adminRouter(prisma) {
     const action = normalizeString(req.body.action);
     const customBody = normalizeString(req.body.customBody);
 
-    const candidate = await prisma.candidate.findUnique({ where: { id } });
+    const candidate = await prisma.candidate.findUnique({
+      where: { id },
+      include: {
+        vacancy: {
+          select: {
+            city: true
+          }
+        }
+      }
+    });
     if (!candidate) return res.redirect(`/admin/candidates/${id}?outboundError=Candidato no encontrado.`);
 
     const window = await getOutboundWindowStatus(prisma, id);
@@ -1795,7 +1818,6 @@ export function adminRouter(prisma) {
     }
 
     const templates = {
-      request_missing_data: 'Hola 👋 Para continuar con tu postulación, por favor envíame los datos faltantes que aún no has compartido.',
       request_hv: 'Hola 👋 Para continuar tu proceso necesito tu Hoja de vida (HV) en PDF o Word (.doc/.docx).',
       reminder: 'Te recuerdo que tu proceso sigue activo. Si deseas continuar, comparte la información faltante o tu Hoja de vida (HV).'
     };
@@ -1804,6 +1826,11 @@ export function adminRouter(prisma) {
     if (action === 'free_text') {
       if (!customBody) return res.redirect(`/admin/candidates/${id}?outboundError=El mensaje no puede estar vacío.`);
       body = customBody;
+    } else if (action === 'request_missing_data') {
+      body = buildMissingDataRequestMessage(candidate);
+      if (!body) {
+        return res.redirect(`/admin/candidates/${id}?outboundError=` + encodeURIComponent('Este candidato no tiene datos pendientes por solicitar.'));
+      }
     } else {
       body = templates[action];
       if (!body) return res.redirect(`/admin/candidates/${id}?outboundError=Acción desconocida.`);
