@@ -302,6 +302,20 @@ function normalizeBinaryData(value) {
   return Buffer.from(value);
 }
 
+function isTransientDatabaseAvailabilityError(error) {
+  if (!error) return false;
+  if (error.code === 'P1001') return true;
+
+  const message = String(error.message || error).toLowerCase();
+  return [
+    'the database system is starting up',
+    'the database system is not yet accepting connections',
+    'consistent recovery state has not been yet reached',
+    "can't reach database server",
+    'failed to connect to postgres'
+  ].some((snippet) => message.includes(snippet));
+}
+
 function parseInterviewAssignment(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
@@ -875,7 +889,7 @@ async function loadPendingCvMigrationCount(prisma) {
   });
 }
 
-async function migrateCandidateCvBatch(prisma, limit = 50) {
+async function migrateCandidateCvBatch(prisma, limit = 20) {
   const candidates = await prisma.candidate.findMany({
     where: {
       cvData: { not: null },
@@ -902,12 +916,16 @@ async function migrateCandidateCvBatch(prisma, limit = 50) {
       });
       migrated += 1;
     } catch (error) {
+      if (isTransientDatabaseAvailabilityError(error)) {
+        console.error('[CV_STORAGE_MIGRATION_INTERRUPTED_DB_UNAVAILABLE]', candidate.id, error);
+        return { found: candidates.length, migrated, failed, interrupted: true };
+      }
       failed += 1;
       console.error('[CV_STORAGE_MIGRATION_FAILED]', candidate.id, error);
     }
   }
 
-  return { found: candidates.length, migrated, failed };
+  return { found: candidates.length, migrated, failed, interrupted: false };
 }
 
 export function adminRouter(prisma) {
@@ -1985,9 +2003,12 @@ export function adminRouter(prisma) {
       if (!isStorageConfigured()) {
         return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Configura R2 antes de migrar las hojas de vida fuera de PostgreSQL.'));
       }
-      const result = await migrateCandidateCvBatch(prisma, 100);
+      const result = await migrateCandidateCvBatch(prisma, 20);
       if (!result.found) {
         return res.redirect('/admin/vacancies?success=' + encodeURIComponent('No hay hojas de vida pendientes por migrar.'));
+      }
+      if (result.interrupted) {
+        return res.redirect('/admin/vacancies?error=' + encodeURIComponent(`La base de datos se estaba reiniciando. Se migraron ${result.migrated} hoja(s) de vida antes de pausar el proceso. Espera un minuto y vuelve a intentarlo.`));
       }
 
       const suffix = result.failed ? ` ${result.failed} fallaron.` : '';
