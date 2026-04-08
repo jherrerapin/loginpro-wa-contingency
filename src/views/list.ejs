@@ -401,6 +401,8 @@
   }
   const legacyParams = new URLSearchParams();
   if (activeStatusScope) legacyParams.set('status', activeStatusScope);
+  if (candidateSearch?.field) legacyParams.set('searchField', candidateSearch.field);
+  if (candidateSearch?.text) legacyParams.set('searchText', candidateSearch.text);
   ['neighborhood', 'locality', 'transportMode'].forEach((key) => {
     if (adminFilters && adminFilters[key]) legacyParams.set(key, adminFilters[key]);
   });
@@ -417,6 +419,8 @@
   const dashboardParams = new URLSearchParams();
   if (activeCity) dashboardParams.set('city', activeCity);
   if (selectedDate) dashboardParams.set('date', selectedDate);
+  if (candidateSearch?.field) dashboardParams.set('searchField', candidateSearch.field);
+  if (candidateSearch?.text) dashboardParams.set('searchText', candidateSearch.text);
   appendVacancyFilters(dashboardParams);
   const currentDashboardPath = '/admin' + (dashboardParams.toString() ? '?' + dashboardParams.toString() : '');
   const currentAdminReturnPath = isLegacyMode ? currentLegacyPath : currentDashboardPath;
@@ -438,6 +442,12 @@
 
   function isFemaleCandidate(candidate) {
     return candidate?.gender === 'FEMALE' || candidate?.isFemaleCandidate;
+  }
+
+  function formatCandidatePhone(phone) {
+    const digits = String(phone || '').replace(/\D+/g, '');
+    if (digits.startsWith('57') && digits.length > 10) return digits.slice(2);
+    return digits || String(phone || '');
   }
 
   function candidateFilterValue(candidate, field, vacancyOrCity = null) {
@@ -496,8 +506,8 @@
   <% const showRecruiterFilters = role === 'admin' && ['registered', 'missing_cv_complete'].includes(activeStatusScope); %>
   <% if (role === 'dev') { %>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-      <a href="/admin?status=inbox" class="export-btn">Inbox</a>
-      <a href="/admin?status=all" class="export-btn">Ver todos</a>
+      <a href="/admin?status=inbox<%= candidateSearch?.field ? '&searchField=' + encodeURIComponent(candidateSearch.field) : '' %><%= candidateSearch?.text ? '&searchText=' + encodeURIComponent(candidateSearch.text) : '' %>" class="export-btn">Inbox</a>
+      <a href="/admin?status=all<%= candidateSearch?.field ? '&searchField=' + encodeURIComponent(candidateSearch.field) : '' %><%= candidateSearch?.text ? '&searchText=' + encodeURIComponent(candidateSearch.text) : '' %>" class="export-btn">Ver todos</a>
     </div>
   <% } %>
 
@@ -511,14 +521,42 @@
       { scope: 'rejected',   label: 'Rechazados' },
       { scope: 'all',        label: 'Todos' }
     ];
-    for (const tab of legacyTabs) { %>
-      <a href="/admin?status=<%= tab.scope %>" style="border:1px solid var(--border);background:<%= activeStatusScope===tab.scope ? 'var(--navy)' : 'var(--surface)' %>;color:<%= activeStatusScope===tab.scope ? '#fff' : 'var(--navy)' %>;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;text-decoration:none;"><%= tab.label %></a>
+    for (const tab of legacyTabs) {
+      const tabParams = new URLSearchParams();
+      tabParams.set('status', tab.scope);
+      if (candidateSearch?.field) tabParams.set('searchField', candidateSearch.field);
+      if (candidateSearch?.text) tabParams.set('searchText', candidateSearch.text);
+      if (adminFilters?.neighborhood) tabParams.set('neighborhood', adminFilters.neighborhood);
+      if (adminFilters?.locality) tabParams.set('locality', adminFilters.locality);
+      if (adminFilters?.transportMode) tabParams.set('transportMode', adminFilters.transportMode);
+    %>
+      <a href="/admin?<%= tabParams.toString() %>" style="border:1px solid var(--border);background:<%= activeStatusScope===tab.scope ? 'var(--navy)' : 'var(--surface)' %>;color:<%= activeStatusScope===tab.scope ? '#fff' : 'var(--navy)' %>;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;text-decoration:none;"><%= tab.label %></a>
     <% } %>
   </div>
+
+  <form method="get" action="/admin" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow-sm);">
+    <input type="hidden" name="status" value="<%= activeStatusScope || 'all' %>" />
+    <% if (adminFilters?.neighborhood) { %><input type="hidden" name="neighborhood" value="<%= adminFilters.neighborhood %>" /><% } %>
+    <% if (adminFilters?.locality) { %><input type="hidden" name="locality" value="<%= adminFilters.locality %>" /><% } %>
+    <% if (adminFilters?.transportMode) { %><input type="hidden" name="transportMode" value="<%= adminFilters.transportMode %>" /><% } %>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Buscar por
+      <select name="searchField" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:150px;">
+        <option value="document" <%= (candidateSearch?.field || 'document') === 'document' ? 'selected' : '' %>>Documento</option>
+        <option value="phone" <%= candidateSearch?.field === 'phone' ? 'selected' : '' %>>Celular</option>
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Valor
+      <input type="text" name="searchText" value="<%= candidateSearch?.text || '' %>" placeholder="Escribe el número a buscar" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:220px;" />
+    </label>
+    <button type="submit" class="export-btn" style="cursor:pointer;">Buscar</button>
+    <a href="/admin?status=<%= activeStatusScope || 'all' %>" class="export-btn">Limpiar búsqueda</a>
+  </form>
 
   <% if (showRecruiterFilters) { %>
     <form method="get" action="/admin" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow-sm);">
       <input type="hidden" name="status" value="<%= activeStatusScope %>" />
+      <% if (candidateSearch?.field) { %><input type="hidden" name="searchField" value="<%= candidateSearch.field %>" /><% } %>
+      <% if (candidateSearch?.text) { %><input type="hidden" name="searchText" value="<%= candidateSearch.text %>" /><% } %>
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Barrio
         <input type="text" name="neighborhood" value="<%= adminFilters?.neighborhood || '' %>" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:170px;" />
       </label>
@@ -584,7 +622,7 @@
               <div class="candidate-note">Observaciones: <%= legacyCandidateNote %></div>
             <% } %>
           </td>
-          <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>
+          <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= formatCandidatePhone(c.phone) %></a></td>
           <td><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : (c.documentNumber || '—') %></td>
           <td><%= c.age || '—' %></td>
           <td><%= getCandidateResidenceValue(c, c.vacancy) || '—' %></td>
@@ -664,6 +702,8 @@
 
     <form method="get" action="/admin" id="dateForm" style="display:contents;">
       <% if (activeCity) { %><input type="hidden" name="city" value="<%= activeCity %>" /><% } %>
+      <% if (candidateSearch?.field) { %><input type="hidden" name="searchField" value="<%= candidateSearch.field %>" /><% } %>
+      <% if (candidateSearch?.text) { %><input type="hidden" name="searchText" value="<%= candidateSearch.text %>" /><% } %>
       <% if (vacancyFiltersById) { for (const [vacancyId, filters] of Object.entries(vacancyFiltersById)) { for (const field of vacancyFilterFields) { if (filters && filters[field]) { %>
         <input type="hidden" name="vf_<%= vacancyId %>_<%= field %>" value="<%= filters[field] %>" />
       <% } } } } %>
@@ -682,6 +722,8 @@
             const todayParams = new URLSearchParams();
             if (activeCity) todayParams.set('city', activeCity);
             if (todayStr) todayParams.set('date', todayStr);
+            if (candidateSearch?.field) todayParams.set('searchField', candidateSearch.field);
+            if (candidateSearch?.text) todayParams.set('searchText', candidateSearch.text);
             appendVacancyFilters(todayParams);
           %>
           <a href="/admin?<%= todayParams.toString() %>" class="btn-today">Hoy</a>
@@ -700,10 +742,35 @@
   <% } %>
   <% if (role === 'dev') { %>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-      <a href="/admin?status=inbox" class="export-btn">Inbox</a>
-      <a href="/admin?status=all" class="export-btn">Ver todos</a>
+      <a href="/admin?status=inbox<%= candidateSearch?.field ? '&searchField=' + encodeURIComponent(candidateSearch.field) : '' %><%= candidateSearch?.text ? '&searchText=' + encodeURIComponent(candidateSearch.text) : '' %>" class="export-btn">Inbox</a>
+      <a href="/admin?status=all<%= candidateSearch?.field ? '&searchField=' + encodeURIComponent(candidateSearch.field) : '' %><%= candidateSearch?.text ? '&searchText=' + encodeURIComponent(candidateSearch.text) : '' %>" class="export-btn">Ver todos</a>
     </div>
   <% } %>
+
+  <form method="get" action="/admin" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:var(--shadow-sm);">
+    <% if (activeCity) { %><input type="hidden" name="city" value="<%= activeCity %>" /><% } %>
+    <% if (selectedDate) { %><input type="hidden" name="date" value="<%= selectedDate %>" /><% } %>
+    <% if (vacancyFiltersById) { for (const [vacancyId, filters] of Object.entries(vacancyFiltersById)) { for (const field of vacancyFilterFields) { if (filters && filters[field]) { %>
+      <input type="hidden" name="vf_<%= vacancyId %>_<%= field %>" value="<%= filters[field] %>" />
+    <% } } } } %>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Buscar por
+      <select name="searchField" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:150px;">
+        <option value="document" <%= (candidateSearch?.field || 'document') === 'document' ? 'selected' : '' %>>Documento</option>
+        <option value="phone" <%= candidateSearch?.field === 'phone' ? 'selected' : '' %>>Celular</option>
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted);font-weight:600;">Valor
+      <input type="text" name="searchText" value="<%= candidateSearch?.text || '' %>" placeholder="Escribe el número a buscar" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;min-width:220px;" />
+    </label>
+    <button type="submit" class="export-btn" style="cursor:pointer;">Buscar</button>
+    <%
+      const clearSearchParams = new URLSearchParams();
+      if (activeCity) clearSearchParams.set('city', activeCity);
+      if (selectedDate) clearSearchParams.set('date', selectedDate);
+      appendVacancyFilters(clearSearchParams);
+    %>
+    <a href="/admin<%= clearSearchParams.toString() ? '?' + clearSearchParams.toString() : '' %>" class="export-btn">Limpiar búsqueda</a>
+  </form>
 
   <% if (cities.length > 0) { %>
   <% if (role === 'admin') { %>
@@ -735,6 +802,8 @@
         const cityUrlParams = new URLSearchParams();
         cityUrlParams.set('city', city.name);
         cityUrlParams.set('date', selectedDate);
+        if (candidateSearch?.field) cityUrlParams.set('searchField', candidateSearch.field);
+        if (candidateSearch?.text) cityUrlParams.set('searchText', candidateSearch.text);
         appendVacancyFilters(cityUrlParams);
         const cityUrl = '/admin?' + cityUrlParams.toString();
       %>
@@ -930,7 +999,7 @@
                     <% if (registeredNoBookingNote) { %><div class="candidate-note">Observaciones: <%= registeredNoBookingNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
-                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
+                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= formatCandidatePhone(c.phone) %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
                   <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span>
                   <div class="action-stack">
@@ -982,7 +1051,7 @@
                     <% if (completeWithoutCvNote) { %><div class="candidate-note">Observaciones: <%= completeWithoutCvNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
-                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
+                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= formatCandidatePhone(c.phone) %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
                   <span class="cv-pill cv-no">Sin HV</span>
                   <div class="action-stack">
@@ -1039,7 +1108,7 @@
                     <% if (registeredCompleteNote) { %><div class="candidate-note">Observaciones: <%= registeredCompleteNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
-                    <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
+                    <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= formatCandidatePhone(c.phone) %></a></div>
                     <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
                     <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span>
                     <div class="action-stack">
@@ -1092,7 +1161,7 @@
                     <% if (cvOnlyNote) { %><div class="candidate-note">Observaciones: <%= cvOnlyNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
-                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
+                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= formatCandidatePhone(c.phone) %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
                   <span class="cv-pill cv-no">Sin HV</span>
                   <div class="action-stack">
@@ -1147,7 +1216,7 @@
                     <% if (approvedCandidateNote) { %><div class="candidate-note">Observaciones: <%= approvedCandidateNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
-                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>Tel. <%= c.phone %></a></div>
+                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>Tel. <%= formatCandidatePhone(c.phone) %></a></div>
                   <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
                   <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? 'OK HV' : 'Sin HV' %></span>
                   <div class="action-stack">
@@ -1225,7 +1294,7 @@
                 <div class="candidate-note">Observaciones: <%= orphanCandidateNote %></div>
               <% } %>
             </td>
-            <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>
+            <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= formatCandidatePhone(c.phone) %></a></td>
             <td style="font-size:12px;color:var(--text-muted);"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %></td>
             <td><span class="badge <%= (stBadge[uiSt]||{cls:'badge-nuevo'}).cls %>"><%= (stBadge[uiSt]||{label:uiSt}).label %></span></td>
             <td><span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? '✓ HV' : 'Sin HV' %></span></td>
@@ -1246,5 +1315,7 @@
 
 </body>
 </html>
+
+
 
 

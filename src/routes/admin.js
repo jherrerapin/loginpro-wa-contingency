@@ -43,6 +43,42 @@ function normalizeString(value) {
   return trimmed.length ? trimmed : null;
 }
 
+function normalizeDigits(value) {
+  return String(value || '').replace(/\D+/g, '');
+}
+
+function stripCountryCode57(value) {
+  const digits = normalizeDigits(value);
+  if (digits.startsWith('57') && digits.length > 10) return digits.slice(2);
+  return digits;
+}
+
+function formatPhoneForDisplay(value) {
+  return stripCountryCode57(value) || String(value || '');
+}
+
+function normalizeCandidateSearch(source = {}) {
+  const field = normalizeString(source.searchField);
+  const text = normalizeString(source.searchText);
+  return {
+    field: ['document', 'phone'].includes(field) ? field : 'document',
+    text: text || ''
+  };
+}
+
+function candidateMatchesSearch(candidate, search = {}) {
+  const searchText = normalizeString(search?.text);
+  if (!searchText) return true;
+  if ((search?.field || 'document') === 'phone') {
+    const queryDigits = stripCountryCode57(searchText);
+    const candidateDigits = stripCountryCode57(candidate?.phone);
+    return Boolean(queryDigits) && candidateDigits.includes(queryDigits);
+  }
+  const queryDigits = normalizeDigits(searchText);
+  const candidateDocument = normalizeDigits(candidate?.documentNumber);
+  return Boolean(queryDigits) && candidateDocument.includes(queryDigits);
+}
+
 function normalizeGenderInput(value) {
   const normalized = normalizeString(value)?.toUpperCase() || null;
   return ['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'].includes(normalized) ? normalized : null;
@@ -363,6 +399,7 @@ function normalizeCandidateSnapshot(candidate) {
   const normalizedTransport = normalizeTransportMode(candidate.transportMode);
   return {
     ...candidate,
+    phoneDisplay: formatPhoneForDisplay(candidate.phone),
     status: deriveCandidateStatusForUI({ ...candidate, transportMode: normalizedTransport || normalizeString(candidate.transportMode) }),
     transportMode: normalizedTransport || normalizeString(candidate.transportMode),
     experienceInfo: null,
@@ -405,11 +442,15 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
   const { start, end } = colombiaDayBounds(dateStr);
   const isDev = options.role === 'dev';
   const candidateFilters = options.candidateFilters || null;
+  const candidateSearch = options.candidateSearch || null;
   const shouldFilterCandidates = options.role === 'admin'
     && candidateFilters
     && Object.values(candidateFilters).some(Boolean);
   const filterDashboardCandidates = (candidates) => (
     shouldFilterCandidates ? applyRecruiterCandidateFilters(candidates, candidateFilters) : candidates
+  );
+  const filterSearchedCandidates = (candidates) => (
+    candidateSearch?.text ? candidates.filter((candidate) => candidateMatchesSearch(candidate, candidateSearch)) : candidates
   );
 
   const vacancies = await prisma.vacancy.findMany({
@@ -529,10 +570,10 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
       ? operationallyRegisteredCandidates
       : [];
     const completeWithoutCvBase = operationallyCompleteWithoutCvCandidates;
-    const registeredNoBooking = filterDashboardCandidates(registeredNoBookingBase);
-    const registeredComplete = filterDashboardCandidates(registeredCompleteBase);
-    const completeWithoutCv = filterDashboardCandidates(completeWithoutCvBase);
-    const approvedCandidates = filterDashboardCandidates(approvedCandidatesBase);
+    const registeredNoBooking = filterSearchedCandidates(filterDashboardCandidates(registeredNoBookingBase));
+    const registeredComplete = filterSearchedCandidates(filterDashboardCandidates(registeredCompleteBase));
+    const completeWithoutCv = filterSearchedCandidates(filterDashboardCandidates(completeWithoutCvBase));
+    const approvedCandidates = filterSearchedCandidates(filterDashboardCandidates(approvedCandidatesBase));
     const filteredBookingsToday = normalizeInterviewBookings(v.interviewBookings)
       .map(b => ({
         ...b,
@@ -541,8 +582,10 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
         formattedDateTime: formatDateTimeCO(b.scheduledAt),
         isFemaleHumanReview: isFemaleHumanReviewCandidate(b.candidate)
       }))
-      .filter((booking) => !shouldFilterCandidates
-        || applyRecruiterCandidateFilters([booking.candidate], candidateFilters).length > 0);
+      .filter((booking) => (
+        (!shouldFilterCandidates || applyRecruiterCandidateFilters([booking.candidate], candidateFilters).length > 0)
+        && candidateMatchesSearch(booking.candidate, candidateSearch)
+      ));
 
     if (isDev) {
       registeredNoBooking.sort(compareCandidatesByRecentInbound);
@@ -564,7 +607,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
   }
 
   const cities = Array.from(citiesMap.entries()).map(([name, vacs]) => ({ name, vacancies: vacs }));
-  const decoratedLegacyCandidates = filterDashboardCandidates(legacyCandidates.map(decorateDashboardCandidate));
+  const decoratedLegacyCandidates = filterSearchedCandidates(filterDashboardCandidates(legacyCandidates.map(decorateDashboardCandidate)));
   if (isDev) decoratedLegacyCandidates.sort(compareCandidatesByRecentInbound);
   return {
     cities,
@@ -740,6 +783,7 @@ export function adminRouter(prisma) {
     const requestedStatus = normalizeString(req.query.status);
     const adminFilters = normalizeCandidateListFilters(req.query);
     const vacancyFiltersById = normalizeVacancyDashboardFilters(req.query);
+    const candidateSearch = normalizeCandidateSearch(req.query);
     const canUseLegacyScope = requestedStatus
       && ADMIN_STATUS_SCOPES.has(requestedStatus)
       && (req.userRole === 'dev' || RECRUITER_STATUS_SCOPES.has(requestedStatus));
@@ -792,6 +836,9 @@ export function adminRouter(prisma) {
       if (req.userRole === 'admin' && ['registered', 'missing_cv_complete'].includes(requestedStatus)) {
         candidates = applyRecruiterCandidateFilters(candidates, adminFilters);
       }
+      if (candidateSearch.text) {
+        candidates = candidates.filter((candidate) => candidateMatchesSearch(candidate, candidateSearch));
+      }
       if (req.userRole === 'dev') {
         candidates.sort(compareCandidatesByRecentInbound);
       }
@@ -805,6 +852,7 @@ export function adminRouter(prisma) {
         errorMsg: normalizeString(req.query.error),
         isFemaleHumanReviewCandidate,
         adminFilters,
+        candidateSearch,
         vacancyFiltersById: {}
       });
     }
@@ -812,7 +860,8 @@ export function adminRouter(prisma) {
     const rawDate = normalizeString(req.query.date);
     const selectedDate = isValidDateString(rawDate) ? rawDate : todayCO();
     const { cities, legacyCandidates } = await buildDashboardData(prisma, selectedDate, {
-      role: req.userRole
+      role: req.userRole,
+      candidateSearch
     });
 
     const rawCity = normalizeString(req.query.city);
@@ -828,6 +877,7 @@ export function adminRouter(prisma) {
       errorMsg: normalizeString(req.query.error),
       isFemaleHumanReviewCandidate,
       adminFilters,
+      candidateSearch,
       vacancyFiltersById
     });
   });
