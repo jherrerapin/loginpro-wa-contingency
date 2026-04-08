@@ -114,8 +114,11 @@ app.use('/webhook', webhookRouter(prisma));
 app.use('/admin', adminRouter(prisma));
 app.use('/admin/locations', locationsRouter(prisma));
 
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res, next) => {
   console.error(err);
+  if (res.headersSent) {
+    return next(err);
+  }
   res.status(500).json({ error: 'internal_server_error' });
 });
 
