@@ -476,6 +476,7 @@
             <label for="age">Edad</label>
             <input id="age" name="age" type="number" min="0" value="<%= candidate.age ?? '' %>" />
           </div>
+          <% if (role === 'dev') { %>
           <div class="field-group">
             <label for="gender">Género</label>
             <select id="gender" name="gender">
@@ -485,6 +486,7 @@
               <option value="OTHER" <%= candidate.gender === 'OTHER' ? 'selected' : '' %>>Otro</option>
             </select>
           </div>
+          <% } %>
           <div class="field-group">
             <label for="neighborhood">Barrio</label>
             <input id="neighborhood" name="neighborhood" type="text" value="<%= candidate.neighborhood || '' %>" />
