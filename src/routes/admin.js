@@ -1455,10 +1455,11 @@ export function adminRouter(prisma) {
     };
     const status = normalizeString(raw.status);
     if (status) adminStatusFields.status = status;
-    const gender = normalizeGenderInput(raw.gender);
+    const canEditGender = req.userRole === 'dev';
+    const gender = canEditGender ? normalizeGenderInput(raw.gender) : null;
     if (gender) adminStatusFields.gender = gender;
 
-    if (gender === Gender.FEMALE) {
+    if (canEditGender && gender === Gender.FEMALE) {
       const hasCv = Boolean(existingCandidate.cvData || existingCandidate.cvOriginalName || existingCandidate.cvMimeType);
       if (hasCv || [ConversationStep.ASK_CV, ConversationStep.DONE, ConversationStep.SCHEDULING, ConversationStep.SCHEDULED].includes(existingCandidate.currentStep)) {
         adminStatusFields.botPaused = true;
