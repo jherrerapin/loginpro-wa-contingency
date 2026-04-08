@@ -227,6 +227,17 @@
     .candidate-name { font-weight: 600; color: var(--navy); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .candidate-doc  { font-size: 12px; color: var(--text-muted); }
     .candidate-extra { font-size: 11px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
+    .candidate-note {
+      font-size: 11px;
+      color: var(--navy);
+      margin-top: 5px;
+      line-height: 1.45;
+      padding: 5px 8px;
+      background: #f8fafc;
+      border-left: 3px solid #cbd5e1;
+      border-radius: 6px;
+      max-width: 560px;
+    }
     .candidate-dev-meta { font-size: 11px; color: var(--blue); margin-top: 4px; font-weight: 600; }
     .candidate-flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
     .candidate-phone a { color: var(--teal); font-weight: 600; font-size: 12px; text-decoration: none; }
@@ -423,6 +434,11 @@
     }
     return Array.from(uniqueValues.values()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }
+  function candidateObservationSnippet(candidate) {
+    const note = String(candidate?.interviewNotes || '').trim();
+    if (!note) return '';
+    return note.length > 180 ? note.slice(0, 177) + '…' : note;
+  }
 %>
 
 <% if (typeof mode === 'undefined' || mode === 'legacy') { %>
@@ -457,7 +473,7 @@
       ...(role === 'dev' ? [{ scope: 'inbox', label: 'Inbox' }] : []),
       { scope: 'registered', label: 'Registrados' },
       ...(role === 'admin' ? [{ scope: 'missing_cv_complete', label: 'Pendientes HV' }] : []),
-      { scope: 'new',        label: 'Nuevos' },
+      ...(role === 'dev' ? [{ scope: 'new', label: 'Nuevos' }] : []),
       { scope: 'contacted',  label: 'Contactados' },
       { scope: 'rejected',   label: 'Rechazados' },
       { scope: 'all',        label: 'Todos' }
@@ -529,6 +545,10 @@
             <% } %>
             <% if (role === 'dev') { %>
               <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
+            <% } %>
+            <% const legacyCandidateNote = candidateObservationSnippet(c); %>
+            <% if (legacyCandidateNote) { %>
+              <div class="candidate-note">Observaciones: <%= legacyCandidateNote %></div>
             <% } %>
           </td>
           <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>
@@ -676,7 +696,7 @@
     <% for (const city of cities) { %>
       <%
         const cityTotal = city.vacancies.reduce((sum, v) => {
-          return sum + v.bookingsToday.length + v.registeredNoBooking.length + v.registeredComplete.length + v.completeWithoutCv.length;
+          return sum + v.bookingsToday.length + v.registeredNoBooking.length + v.registeredComplete.length + v.completeWithoutCv.length + v.approvedCandidates.length;
         }, 0);
         const cityUrlParams = new URLSearchParams();
         cityUrlParams.set('city', city.name);
@@ -719,12 +739,14 @@
           ...v.registeredNoBooking,
           ...v.registeredComplete,
           ...v.completeWithoutCv,
+          ...v.approvedCandidates,
           ...v.bookingsToday.map((booking) => booking.candidate).filter(Boolean)
         ];
         const filteredBookingsToday = v.bookingsToday.filter((booking) => candidateMatchesVacancyFilters(booking.candidate, currentVacancyFilters));
         const filteredRegisteredNoBooking = v.registeredNoBooking.filter((candidate) => candidateMatchesVacancyFilters(candidate, currentVacancyFilters));
         const filteredRegisteredComplete = v.registeredComplete.filter((candidate) => candidateMatchesVacancyFilters(candidate, currentVacancyFilters));
         const filteredCompleteWithoutCv = v.completeWithoutCv.filter((candidate) => candidateMatchesVacancyFilters(candidate, currentVacancyFilters));
+        const filteredApprovedCandidates = v.approvedCandidates.filter((candidate) => candidateMatchesVacancyFilters(candidate, currentVacancyFilters));
         const vacancyFiltersActive = vacancyFilterFields.some((field) => currentVacancyFilters[field]);
         const clearVacancyParams = new URLSearchParams();
         if (activeCity) clearVacancyParams.set('city', activeCity);
@@ -808,6 +830,8 @@
                         <% if (b.candidate.age) { %><div style="font-size:11px;color:var(--text-muted);"><%= b.candidate.age %> años</div><% } %>
                         <% const bookingMeta = candidateOperationalMeta(b.candidate, { includeNeighborhood: false }); %>
                         <% if (bookingMeta) { %><div class="candidate-extra"><%= bookingMeta %></div><% } %>
+                        <% const bookingNote = candidateObservationSnippet(b.candidate); %>
+                        <% if (bookingNote) { %><div class="candidate-note">Observaciones: <%= bookingNote %></div><% } %>
                       </td>
                       <td style="font-size:12px;color:var(--text-muted);"><%= b.candidate.documentType && b.candidate.documentNumber ? b.candidate.documentType + ' ' + b.candidate.documentNumber : '—' %></td>
                       <td style="font-size:12px;color:var(--text-muted);"><%= b.candidate.neighborhood || '—' %></td>
@@ -867,6 +891,8 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
+                    <% const registeredNoBookingNote = candidateObservationSnippet(c); %>
+                    <% if (registeredNoBookingNote) { %><div class="candidate-note">Observaciones: <%= registeredNoBookingNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
@@ -917,6 +943,8 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
+                    <% const completeWithoutCvNote = candidateObservationSnippet(c); %>
+                    <% if (completeWithoutCvNote) { %><div class="candidate-note">Observaciones: <%= completeWithoutCvNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
@@ -972,6 +1000,8 @@
                       <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
+                    <% const registeredCompleteNote = candidateObservationSnippet(c); %>
+                    <% if (registeredCompleteNote) { %><div class="candidate-note">Observaciones: <%= registeredCompleteNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                     <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
@@ -1023,6 +1053,8 @@
                     <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '—' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const candidateMeta = candidateOperationalMeta(c); %>
                     <% if (candidateMeta) { %><div class="candidate-extra"><%= candidateMeta %></div><% } %>
+                    <% const cvOnlyNote = candidateObservationSnippet(c); %>
+                    <% if (cvOnlyNote) { %><div class="candidate-note">Observaciones: <%= cvOnlyNote %></div><% } %>
                     <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
                   </div>
                   <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>📱 <%= c.phone %></a></div>
@@ -1039,6 +1071,58 @@
                 </div>
               <% } %>
               <% if (filteredCompleteWithoutCv.length > 25) { %><div style="text-align:center;padding:8px;font-size:12px;color:var(--text-muted);">+ <%= filteredCompleteWithoutCv.length - 25 %> más — <a href="/admin/export?scope=missing_cv_complete" style="color:var(--teal);font-weight:600;">ver todos</a></div><% } %>
+            </div>
+          </div>
+          <% } %>
+
+          <% if (v.approvedCandidates.length > 0) { %>
+          <div class="section">
+            <div class="section-header">
+              <span class="section-title">✅&nbsp; Aprobados</span>
+              <span class="section-count"><%= filteredApprovedCandidates.length %></span>
+            </div>
+            <div class="candidates-list">
+              <% if (filteredApprovedCandidates.length === 0) { %>
+                <div class="empty-state"><div class="empty-icon">📭</div><p>No hay candidatos aprobados que coincidan con este filtro.</p></div>
+              <% } %>
+              <% for (const c of filteredApprovedCandidates.slice(0, 25)) { %>
+                <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
+                <% const stBadge = candidateStatusBadge[uiSt] || { cls: 'badge-aprobado', label: uiSt }; %>
+                <div class="candidate-row <%= isFemaleCandidate(c) ? 'candidate-row-female' : '' %>">
+                  <div>
+                    <div class="candidate-name"><%= c.fullName || 'Sin nombre' %></div>
+                    <% if (isFemaleCandidate(c)) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-female"><%= c.isFemaleHumanReview ? 'Candidata femenina' : 'Mujer' %></span>
+                      </div>
+                    <% } %>
+                    <% if (c.isFemaleHumanReview) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-human-review">RevisiÃ³n humana</span>
+                      </div>
+                    <% } %>
+                    <% if (role === 'dev' && c.hasNewInbound) { %>
+                      <div class="candidate-flags">
+                        <span class="badge badge-unread">Mensaje nuevo</span>
+                      </div>
+                    <% } %>
+                    <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : 'â€”' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> aÃ±os<% } %></div>
+                    <% const approvedCandidateMeta = candidateOperationalMeta(c); %>
+                    <% if (approvedCandidateMeta) { %><div class="candidate-extra"><%= approvedCandidateMeta %></div><% } %>
+                    <% const approvedCandidateNote = candidateObservationSnippet(c); %>
+                    <% if (approvedCandidateNote) { %><div class="candidate-note">Observaciones: <%= approvedCandidateNote %></div><% } %>
+                    <% if (role === 'dev') { %><div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div><% } %>
+                  </div>
+                  <div class="candidate-phone"><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank" rel="noopener"' %>>ðŸ“± <%= c.phone %></a></div>
+                  <span class="badge <%= stBadge.cls %>"><%= stBadge.label %></span>
+                  <span class="cv-pill <%= c.hasCv ? 'cv-yes' : 'cv-no' %>"><%= c.hasCv ? 'âœ“ HV' : 'Sin HV' %></span>
+                  <div class="action-stack">
+                    <% if (role === 'dev') { %><a href="<%= candidateWhatsappHref(c) %>" class="action-btn action-btn-neutral">Enviar mensaje</a><% } %>
+                    <a href="<%= candidateDetailHref(c) %>" class="link-detail">Ver â†’</a>
+                  </div>
+                </div>
+              <% } %>
+              <% if (filteredApprovedCandidates.length > 25) { %><div style="text-align:center;padding:8px;font-size:12px;color:var(--text-muted);">+ <%= filteredApprovedCandidates.length - 25 %> mÃ¡s aprobados</div><% } %>
             </div>
           </div>
           <% } %>
@@ -1101,6 +1185,10 @@
               <% } %>
               <% if (role === 'dev') { %>
                 <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
+              <% } %>
+              <% const orphanCandidateNote = candidateObservationSnippet(c); %>
+              <% if (orphanCandidateNote) { %>
+                <div class="candidate-note">Observaciones: <%= orphanCandidateNote %></div>
               <% } %>
             </td>
             <td><a href="<%= candidateWhatsappHref(c) %>" <%= role === 'dev' ? '' : 'target="_blank"' %> style="color:#25d366;font-weight:600;"><%= c.phone %></a></td>

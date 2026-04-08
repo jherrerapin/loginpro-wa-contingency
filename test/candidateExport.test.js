@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  deriveCandidateStatusForUI,
   exportFilenameByScope,
   filterCandidatesByScope,
   formatDateForFilenameCO,
@@ -30,13 +31,20 @@ test('registered operativo exige campos completos + CV + no rechazado', () => {
   assert.equal(isOperationallyRegistered({ ...baseCandidate, cvData: null }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'RECHAZADO' }), false);
   assert.equal(isOperationallyRegistered({ ...baseCandidate, status: 'CONTACTADO' }), false);
-  assert.equal(isOperationallyRegistered({ ...baseCandidate, experienceTime: '' }), false);
+  assert.equal(isOperationallyRegistered({ ...baseCandidate, transportMode: '' }), false);
 });
 
-test('legacy VALIDANDO/APROBADO se normalizan visualmente a REGISTRADO', () => {
+test('legacy VALIDANDO se normaliza a REGISTRADO y APROBADO se mantiene visible', () => {
   assert.equal(normalizeCandidateStatusForUI('VALIDANDO'), 'REGISTRADO');
-  assert.equal(normalizeCandidateStatusForUI('APROBADO'), 'REGISTRADO');
+  assert.equal(normalizeCandidateStatusForUI('APROBADO'), 'APROBADO');
   assert.equal(normalizeCandidateStatusForUI('CONTACTADO'), 'CONTACTADO');
+});
+
+test('deriveCandidateStatusForUI refleja reglas operativas reales', () => {
+  assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'NUEVO' }), 'REGISTRADO');
+  assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'REGISTRADO', cvData: null }), 'NUEVO');
+  assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'APROBADO', cvData: null }), 'APROBADO');
+  assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'CONTACTADO', cvData: null }), 'CONTACTADO');
 });
 
 test('scope registered incluye estados legacy cuando cumplen criterio operativo', () => {
@@ -76,7 +84,7 @@ test('isOperationallyCompleteWithoutCv devuelve true cuando está completo y sin
 
 test('isOperationallyCompleteWithoutCv devuelve false si falta un dato clave', () => {
   assert.equal(isOperationallyCompleteWithoutCv({ ...baseCandidate, cvData: null, fullName: '' }), false);
-  assert.equal(isOperationallyCompleteWithoutCv({ ...baseCandidate, cvData: null, experienceTime: null }), false);
+  assert.equal(isOperationallyCompleteWithoutCv({ ...baseCandidate, cvData: null, transportMode: null }), false);
 });
 
 test('isOperationallyCompleteWithoutCv devuelve false si está rechazado', () => {
@@ -104,8 +112,10 @@ test('scope missing_cv_complete filtra candidatos completos sin HV', () => {
 
 test('ruta /admin/export acepta missing_cv_complete como scope válido', () => {
   const adminRouteSource = fs.readFileSync('src/routes/admin.js', 'utf8');
-  assert.match(adminRouteSource, /const EXPORT_SCOPES = new Set\(\['registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all'\]\)/);
-  assert.match(adminRouteSource, /const scope = EXPORT_SCOPES\.has\(requestedScope\) \? requestedScope : 'all';/);
+  assert.match(adminRouteSource, /const EXPORT_SCOPES = new Set\(\['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected', 'all'\]\)/);
+  assert.match(adminRouteSource, /const scope = normalizeString\(req\.query\.scope\) \|\| 'all';/);
+  assert.match(adminRouteSource, /if \(!EXPORT_SCOPES\.has\(scope\)\)/);
+  assert.match(adminRouteSource, /res\.status\(400\)\.send\(/);
 });
 
 test('vistas principales reemplazan branding de texto y referencian favicon', () => {

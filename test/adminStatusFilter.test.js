@@ -12,8 +12,8 @@ function completeCandidate(overrides = {}) {
     documentNumber: '123',
     age: 22,
     neighborhood: 'Centro',
-    experienceInfo: 'Sí',
-    experienceTime: '1 año',
+    experienceInfo: 'Si',
+    experienceTime: '1 ano',
     medicalRestrictions: 'No',
     transportMode: 'Bus',
     cvData: Buffer.from('cv'),
@@ -37,6 +37,11 @@ function createPrismaMock(candidates) {
       async findFirst() {
         return null;
       },
+      async findMany() {
+        return [];
+      }
+    },
+    vacancy: {
       async findMany() {
         return [];
       }
@@ -82,27 +87,27 @@ async function loginAndGetCookie(baseUrl) {
   return cookie.split(';')[0];
 }
 
-test('GET /admin usa status=registered por defecto y mapea legacy como registrados', async () => {
+test('GET /admin?status=registered muestra operativos y conserva APROBADO visible', async () => {
   const server = await createServer([
     completeCandidate({ id: 'legacy-validando', status: 'VALIDANDO' }),
     completeCandidate({ id: 'legacy-aprobado', status: 'APROBADO' }),
-    completeCandidate({ id: 'contactado', status: 'CONTACTADO' }),
+    completeCandidate({ id: 'contactado', status: 'CONTACTADO', fullName: 'Carlos Contactado' }),
     completeCandidate({ id: 'nuevo', status: 'NUEVO', cvData: null }),
-    completeCandidate({ id: 'rechazado', status: 'RECHAZADO' })
+    completeCandidate({ id: 'rechazado', status: 'RECHAZADO', fullName: 'Rex Rechazado' })
   ]);
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
     const cookie = await loginAndGetCookie(baseUrl);
-    const response = await fetch(`${baseUrl}/admin`, { headers: { Cookie: cookie } });
+    const response = await fetch(`${baseUrl}/admin?status=registered`, { headers: { Cookie: cookie } });
     const html = await response.text();
 
     assert.equal(response.status, 200);
     assert.match(html, /Mostrando 2 candidato\(s\) registrados/);
     assert.match(html, /badge-registrado">Registrado/);
-    assert.doesNotMatch(html, /contactado/i);
-    assert.doesNotMatch(html, /En revisión/);
-    assert.doesNotMatch(html, /Aprobado/);
+    assert.match(html, /badge-aprobado">Aprobado/);
+    assert.doesNotMatch(html, /Carlos Contactado/);
+    assert.doesNotMatch(html, /Rex Rechazado/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -133,7 +138,37 @@ test('GET /admin?status=contacted muestra solo candidatos contactados', async ()
   }
 });
 
+test('recruiter no ve pestaña de nuevos ni candidatos incompletos en status=all', async () => {
+  const server = await createServer([
+    completeCandidate({ id: 'legacy-validando', status: 'VALIDANDO', fullName: 'Val Legacy' }),
+    completeCandidate({ id: 'legacy-aprobado', status: 'APROBADO', fullName: 'Aprob Legacy' }),
+    completeCandidate({ id: 'nuevo-incompleto', status: 'NUEVO', fullName: 'Nuevo Incompleto', cvData: null }),
+    completeCandidate({ id: 'contactado', status: 'CONTACTADO', fullName: 'Carlos Contactado' })
+  ]);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const cookie = await loginAndGetCookie(baseUrl);
+    const response = await fetch(`${baseUrl}/admin?status=all`, { headers: { Cookie: cookie } });
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(html, />Nuevos</);
+    assert.match(html, /Val Legacy/);
+    assert.match(html, /Aprob Legacy/);
+    assert.match(html, /Carlos Contactado/);
+    assert.doesNotMatch(html, /Nuevo Incompleto/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('detail.ejs deja NUEVO solo para dev', async () => {
+  const detailTemplate = await fs.readFile(path.resolve(process.cwd(), 'src/views/detail.ejs'), 'utf8');
+  assert.match(detailTemplate, /<% if \(role === 'dev'\) \{ %>\s*<option value="NUEVO"/);
+});
+
 test('detail.ejs ya no renderiza la tarjeta Traza AI/CV', async () => {
   const detailTemplate = await fs.readFile(path.resolve(process.cwd(), 'src/views/detail.ejs'), 'utf8');
-  assert.doesNotMatch(detailTemplate, /Traza AI\/CV \(últimos mensajes inbound\)/);
+  assert.doesNotMatch(detailTemplate, /Traza AI\/CV \(ultimos mensajes inbound\)/i);
 });

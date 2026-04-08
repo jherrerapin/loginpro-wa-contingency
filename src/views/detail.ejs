@@ -31,7 +31,9 @@
     .edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
     .field-group { display: flex; flex-direction: column; gap: 6px; }
     .field-group label { font-size: 12px; color: #666; font-weight: 600; }
-    .field-group input, .field-group select { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .field-group textarea { min-height: 96px; resize: vertical; font-family: inherit; }
+    .field-group-full { grid-column: 1 / -1; }
     .form-actions { margin-top: 14px; display: flex; gap: 10px; }
     .btn-primary { padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
     .btn-primary:hover { background: #2980b9; }
@@ -188,6 +190,10 @@
           <label>Medio de transporte</label>
           <span><%= candidate.transportMode || '—' %></span>
         </div>
+        <div class="info-item" style="grid-column: 1 / -1;">
+          <label>Observaciones</label>
+          <span><%= candidate.interviewNotes || '—' %></span>
+        </div>
         <div class="info-item">
           <label>Fecha de registro</label>
           <span><%= formatDateTimeCO(candidate.createdAt) %></span>
@@ -223,7 +229,9 @@
       <form method="post" action="/admin/candidates/<%= candidate.id %>/status" class="status-form">
         <input type="hidden" name="returnTo" value="<%= returnToPath || '/admin' %>" />
         <select name="status">
+          <% if (role === 'dev') { %>
           <option value="NUEVO" <%= uiStatus === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
+          <% } %>
           <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
           <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
           <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
@@ -486,6 +494,10 @@
               <option value="OTHER" <%= candidate.gender === 'OTHER' ? 'selected' : '' %>>Otro</option>
             </select>
           </div>
+          <div class="field-group field-group-full">
+            <label for="interviewNotes">Observaciones (solo dev)</label>
+            <textarea id="interviewNotes" name="interviewNotes"><%= candidate.interviewNotes || '' %></textarea>
+          </div>
           <% } %>
           <div class="field-group">
             <label for="neighborhood">Barrio</label>
@@ -502,7 +514,9 @@
           <div class="field-group">
             <label for="statusEdit">Estado</label>
             <select id="statusEdit" name="status">
+              <% if (role === 'dev') { %>
               <option value="NUEVO" <%= uiStatus === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
+              <% } %>
               <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
               <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
               <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
