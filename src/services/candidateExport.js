@@ -72,6 +72,13 @@ export function normalizeCandidateStatusForUI(status) {
   return status;
 }
 
+export function deriveCandidateStatusForUI(candidate = {}) {
+  const normalizedStatus = normalizeCandidateStatusForUI(candidate?.status);
+  if (['APROBADO', 'CONTACTADO', 'RECHAZADO'].includes(normalizedStatus)) return normalizedStatus;
+  if (isOperationallyRegistered({ ...candidate, status: 'REGISTRADO' })) return 'REGISTRADO';
+  return 'NUEVO';
+}
+
 export function isOperationallyRegistered(candidate) {
   const uiStatus = normalizeCandidateStatusForUI(candidate.status);
   return hasValue(candidate.fullName)

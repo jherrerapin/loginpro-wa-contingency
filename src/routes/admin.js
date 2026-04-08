@@ -11,6 +11,7 @@ import {
   candidateLastMessageTime,
   candidateLastMessageDirection,
   candidateHasCv,
+  deriveCandidateStatusForUI,
   exportFilenameByScope,
   filterCandidatesByScope,
   isOperationallyCompleteWithoutCv,
@@ -126,6 +127,7 @@ const STATUS_LABELS = {
 };
 
 const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all']);
+const RECRUITER_STATUS_SCOPES = new Set(['registered', 'missing_cv_complete', 'contacted', 'rejected', 'all']);
 const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected', 'all']);
 
 const STATUS_SCOPE_SUMMARY_LABELS = {
@@ -355,6 +357,7 @@ function normalizeCandidateSnapshot(candidate) {
   const normalizedTransport = normalizeTransportMode(candidate.transportMode);
   return {
     ...candidate,
+    status: deriveCandidateStatusForUI({ ...candidate, transportMode: normalizedTransport || normalizeString(candidate.transportMode) }),
     transportMode: normalizedTransport || normalizeString(candidate.transportMode),
     experienceInfo: null,
     experienceTime: null
@@ -431,6 +434,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
               documentType: true, documentNumber: true,
               age: true, neighborhood: true, locality: true, zone: true, status: true,
               medicalRestrictions: true, transportMode: true,
+              interviewNotes: true,
               cvOriginalName: true, cvMimeType: true, gender: true,
               botPaused: true, botPauseReason: true,
               currentStep: true,
@@ -450,6 +454,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
           documentType: true, documentNumber: true,
           age: true, neighborhood: true, locality: true, zone: true, status: true,
           medicalRestrictions: true, transportMode: true,
+          interviewNotes: true,
           cvOriginalName: true, cvMimeType: true,
           gender: true, createdAt: true,
           botPaused: true, botPauseReason: true,
@@ -479,6 +484,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
         documentType: true, documentNumber: true,
         age: true, neighborhood: true, locality: true, zone: true, status: true,
         medicalRestrictions: true, transportMode: true,
+        interviewNotes: true,
         cvOriginalName: true, cvMimeType: true, createdAt: true,
         gender: true, botPaused: true, botPauseReason: true,
         currentStep: true,
@@ -499,9 +505,14 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
     const bookedCandidateIds = new Set(candidatesWithFlags
       .filter((candidate) => candidate.interviewBookings.length > 0)
       .map((candidate) => candidate.id));
-    const operationallyRegisteredCandidates = candidatesWithFlags
+    const approvedCandidatesBase = candidatesWithFlags
+      .filter((candidate) => normalizeCandidateStatusForUI(candidate.status) === 'APROBADO')
+      .filter((candidate) => !v.schedulingEnabled || !bookedCandidateIds.has(candidate.id));
+    const pendingReviewCandidates = candidatesWithFlags
+      .filter((candidate) => ['NUEVO', 'REGISTRADO'].includes(normalizeCandidateStatusForUI(candidate.status)));
+    const operationallyRegisteredCandidates = pendingReviewCandidates
       .filter((candidate) => isOperationallyRegistered(candidate));
-    const operationallyCompleteWithoutCvCandidates = candidatesWithFlags
+    const operationallyCompleteWithoutCvCandidates = pendingReviewCandidates
       .filter((candidate) => isOperationallyCompleteWithoutCv(candidate));
 
     const registeredNoBookingBase = v.schedulingEnabled
@@ -515,6 +526,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
     const registeredNoBooking = filterDashboardCandidates(registeredNoBookingBase);
     const registeredComplete = filterDashboardCandidates(registeredCompleteBase);
     const completeWithoutCv = filterDashboardCandidates(completeWithoutCvBase);
+    const approvedCandidates = filterDashboardCandidates(approvedCandidatesBase);
     const filteredBookingsToday = normalizeInterviewBookings(v.interviewBookings)
       .map(b => ({
         ...b,
@@ -530,6 +542,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
       registeredNoBooking.sort(compareCandidatesByRecentInbound);
       registeredComplete.sort(compareCandidatesByRecentInbound);
       completeWithoutCv.sort(compareCandidatesByRecentInbound);
+      approvedCandidates.sort(compareCandidatesByRecentInbound);
     }
 
     const enriched = {
@@ -537,7 +550,8 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
       bookingsToday: filteredBookingsToday,
       registeredNoBooking,
       registeredComplete,
-      completeWithoutCv
+      completeWithoutCv,
+      approvedCandidates
     };
 
     citiesMap.get(city).push(enriched);
@@ -721,7 +735,7 @@ export function adminRouter(prisma) {
     const vacancyFiltersById = normalizeVacancyDashboardFilters(req.query);
     const canUseLegacyScope = requestedStatus
       && ADMIN_STATUS_SCOPES.has(requestedStatus)
-      && (req.userRole === 'dev' || requestedStatus !== 'inbox');
+      && (req.userRole === 'dev' || RECRUITER_STATUS_SCOPES.has(requestedStatus));
 
     if (canUseLegacyScope) {
       const legacyQuery = {
@@ -738,6 +752,7 @@ export function adminRouter(prisma) {
           zone: true,
           medicalRestrictions: true,
           transportMode: true,
+          interviewNotes: true,
           status: true,
           rejectionReason: true,
           rejectionDetails: true,
@@ -763,6 +778,9 @@ export function adminRouter(prisma) {
       const allCandidates = (await prisma.candidate.findMany(legacyQuery))
         .map(decorateDashboardCandidate);
       let candidates = filterCandidatesByScope(allCandidates, requestedStatus);
+      if (req.userRole === 'admin' && requestedStatus === 'all') {
+        candidates = candidates.filter((candidate) => normalizeCandidateStatusForUI(candidate.status) !== 'NUEVO');
+      }
       if (req.userRole === 'admin' && ['registered', 'missing_cv_complete'].includes(requestedStatus)) {
         candidates = applyRecruiterCandidateFilters(candidates, adminFilters);
       }
@@ -1318,7 +1336,9 @@ export function adminRouter(prisma) {
     const { id } = req.params;
     const status = normalizeString(req.body.status);
     const returnTo = safeAdminReturnPath(req.body.returnTo || '/admin');
-    const allowed = ['NUEVO', 'REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO'];
+    const allowed = req.userRole === 'dev'
+      ? ['NUEVO', 'REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO']
+      : ['REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO'];
     if (!status || !allowed.includes(status)) return res.redirect(buildCandidateDetailPath(id, returnTo));
     await prisma.candidate.update({ where: { id }, data: { status } });
     res.redirect(buildCandidateDetailPath(id, returnTo));
@@ -1460,6 +1480,7 @@ export function adminRouter(prisma) {
     const canEditGender = req.userRole === 'dev';
     const gender = canEditGender ? normalizeGenderInput(raw.gender) : null;
     if (gender) adminStatusFields.gender = gender;
+    if (req.userRole === 'dev') adminStatusFields.interviewNotes = normalizeString(raw.interviewNotes);
 
     if (canEditGender && gender === Gender.FEMALE) {
       const hasCv = Boolean(existingCandidate.cvData || existingCandidate.cvOriginalName || existingCandidate.cvMimeType);
