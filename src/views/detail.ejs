@@ -77,7 +77,7 @@
     .booking-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
     .booking-title { font-weight: 700; color: #2c3e50; }
     .booking-meta { font-size: 13px; color: #666; }
-    .booking-status { font-size: 13px; font-weight: 700; }
+    .booking-status { font-size: 13px; font-weight: 700; min-width: 108px; text-align: right; }
     .booking-status-confirmed { color: #1f7a38; }
     .booking-status-scheduled { color: #2980b9; }
     .booking-status-rescheduled { color: #b45309; }
@@ -218,6 +218,7 @@
     }; %>
     <% const isDevRole = String(role) === 'dev'; %>
     <% const bookingActions = [
+      { key: 'confirmed', label: 'Confirmada', cls: 'action-btn-ok', status: 'CONFIRMED' },
       { key: 'attended', label: 'Asistió', cls: 'action-btn-ok', status: 'CONFIRMED' },
       { key: 'no_response', label: 'No contesta', cls: 'action-btn-warn', status: 'NO_RESPONSE' },
       { key: 'no_show', label: 'No asistió', cls: 'action-btn-danger', status: 'NO_SHOW' },
@@ -507,7 +508,7 @@
                 <% } %>
                 <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
                   <details class="booking-reschedule">
-                    <summary class="action-btn action-btn-warn">ReagendÃ³</summary>
+                    <summary class="action-btn action-btn-warn">Reagendó</summary>
                     <div class="booking-reschedule-panel">
                       <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
                         <form method="post" action="/admin/candidates/<%= candidate.id %>/interview-assign" class="booking-reschedule-form">
@@ -524,7 +525,7 @@
                           <button type="submit" class="action-btn action-btn-warn">Confirmar reagendamiento</button>
                         </form>
                       <% } else { %>
-                        <div class="booking-reschedule-note">No hay horarios disponibles esta semana. Se deberÃ¡ contactar al candidato para concretar un nuevo horario.</div>
+                        <div class="booking-reschedule-note">No hay horarios disponibles esta semana. Se deberá contactar al candidato para concretar un nuevo horario.</div>
                       <% } %>
                     </div>
                   </details>
@@ -734,4 +735,3 @@
   </div>
 </body>
 </html>
-
