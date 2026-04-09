@@ -77,7 +77,7 @@ export function normalizeCandidateStatusForUI(status) {
 
 export function deriveCandidateStatusForUI(candidate = {}) {
   const normalizedStatus = normalizeCandidateStatusForUI(candidate?.status);
-  if (['APROBADO', 'CONTACTADO', 'RECHAZADO'].includes(normalizedStatus)) return normalizedStatus;
+  if (['APROBADO', 'CONTACTADO', 'RECHAZADO', 'CONTRATADO'].includes(normalizedStatus)) return normalizedStatus;
   if (isOperationallyRegistered({ ...candidate, status: 'REGISTRADO' })) return 'REGISTRADO';
   return 'NUEVO';
 }
@@ -118,6 +118,7 @@ export function filterCandidatesByScope(candidates, scope = 'all') {
   if (scope === 'missing_cv_complete') return candidates.filter((c) => isOperationallyCompleteWithoutCv(c));
   if (scope === 'new') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'NUEVO');
   if (scope === 'contacted') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'CONTACTADO');
+  if (scope === 'contracted') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'CONTRATADO');
   if (scope === 'rejected') return candidates.filter((c) => normalizeCandidateStatusForUI(c.status) === 'RECHAZADO');
   return candidates;
 }
@@ -134,7 +135,7 @@ export function formatDateForFilenameCO(date = new Date()) {
 }
 
 export function exportFilenameByScope(scope = 'all') {
-  const safeScope = ['all', 'registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected'].includes(scope)
+  const safeScope = ['all', 'registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'contracted', 'rejected'].includes(scope)
     ? scope
     : 'all';
   const scopeLabelByKey = {
@@ -143,6 +144,7 @@ export function exportFilenameByScope(scope = 'all') {
     approved: 'aprobados',
     new: 'nuevos',
     contacted: 'contactados',
+    contracted: 'contratados',
     rejected: 'rechazados',
     all: 'todos'
   };

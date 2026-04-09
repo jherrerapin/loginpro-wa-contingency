@@ -3,6 +3,7 @@ import express from 'express';
 import ExcelJS from 'exceljs';
 import path from 'node:path';
 import multer from 'multer';
+import bcrypt from 'bcrypt';
 import {
   alignCandidateLocationFields,
   getCandidateResidenceValue,
@@ -33,11 +34,28 @@ import { getReminderMissingItems } from '../services/reminder.js';
 import { clearCandidateCvStorage, resolveCandidateCvBuffer, storeCandidateCv } from '../services/cvStorage.js';
 import { isStorageConfigured } from '../services/storage.js';
 import { loadPendingCvMigrationCount, migrateCandidateCvBatch } from '../services/cvMigration.js';
+import {
+  buildCandidateAccessWhere,
+  buildUniqueRecruiterUsername,
+  buildVacancyAccessWhere,
+  canAccessCandidate,
+  canAccessVacancy,
+  describeUserScope,
+  generateRecoveryCode,
+  getAccessContext,
+  normalizeUserAccessScope
+} from '../services/appUsers.js';
 
 function sessionAuth(req, res, next) {
   const role = req.session?.userRole;
   if (!role) return res.redirect('/login');
   req.userRole = role;
+  req.userId = req.session?.userId || null;
+  req.username = req.session?.username || null;
+  req.userAccessScope = req.session?.userAccessScope || 'ALL';
+  req.userAccessCity = req.session?.userAccessCity || null;
+  req.userAccessVacancyId = req.session?.userAccessVacancyId || null;
+  req.userSource = req.session?.userSource || null;
   return next();
 }
 
@@ -225,6 +243,215 @@ function safeAdminReturnPath(value) {
   return raw.startsWith('/admin') ? raw : '/admin';
 }
 
+function getRequestAccessContext(req) {
+  return getAccessContext({
+    userRole: req.userRole,
+    userId: req.userId,
+    username: req.username,
+    userAccessScope: req.userAccessScope,
+    userAccessCity: req.userAccessCity,
+    userAccessVacancyId: req.userAccessVacancyId
+  });
+}
+
+function ensureCandidateAccess(req, candidate, res, returnTo = '/admin') {
+  const accessContext = getRequestAccessContext(req);
+  if (canAccessCandidate(accessContext, candidate)) return true;
+  if (res) {
+    res.redirect(withFlashMessage(returnTo, 'error', 'No tienes acceso a ese candidato.'));
+  }
+  return false;
+}
+
+function ensureVacancyAccess(req, vacancy, res, returnTo = '/admin/vacancies') {
+  const accessContext = getRequestAccessContext(req);
+  if (canAccessVacancy(accessContext, vacancy)) return true;
+  if (res) {
+    res.redirect(withFlashMessage(returnTo, 'error', 'No tienes acceso a esa vacante.'));
+  }
+  return false;
+}
+
+function getManageableScopeOptions(req, vacancies = []) {
+  const accessContext = getRequestAccessContext(req);
+  if (accessContext.isDev || accessContext.scope === 'ALL') {
+    return {
+      canCreateAll: true,
+      allowedCities: Array.from(new Set(vacancies.map((vacancy) => vacancy.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+      allowedVacancies: vacancies
+    };
+  }
+  if (accessContext.scope === 'CITY') {
+    return {
+      canCreateAll: false,
+      allowedCities: accessContext.city ? [accessContext.city] : [],
+      allowedVacancies: vacancies.filter((vacancy) => vacancy.city === accessContext.city)
+    };
+  }
+  return {
+    canCreateAll: false,
+    allowedCities: [],
+    allowedVacancies: vacancies.filter((vacancy) => vacancy.id === accessContext.vacancyId)
+  };
+}
+
+async function resolveRequestedUserScope(prisma, req, body = {}) {
+  const accessContext = getRequestAccessContext(req);
+  const accessScope = normalizeUserAccessScope(body.accessScope);
+  const scopeCity = normalizeString(body.scopeCity);
+  const scopeVacancyId = normalizeString(body.scopeVacancyId);
+
+  if (!accessContext.isDev && accessContext.scope === 'VACANCY' && accessScope !== 'VACANCY') {
+    return { error: 'Tu perfil solo puede crear usuarios asignados a la misma vacante.' };
+  }
+  if (!accessContext.isDev && accessContext.scope === 'CITY' && accessScope === 'ALL') {
+    return { error: 'Tu perfil no puede crear usuarios con acceso total.' };
+  }
+  if (!accessContext.isDev && accessContext.scope === 'VACANCY' && scopeVacancyId !== accessContext.vacancyId) {
+    return { error: 'Tu perfil solo puede crear usuarios para tu misma vacante.' };
+  }
+
+  if (accessScope === 'ALL') {
+    if (!accessContext.isDev && accessContext.scope !== 'ALL') {
+      return { error: 'Solo dev o un reclutador general pueden crear usuarios con acceso total.' };
+    }
+    return {
+      accessScope,
+      scopeCity: null,
+      scopeVacancyId: null,
+      scopeVacancy: null
+    };
+  }
+
+  if (accessScope === 'CITY') {
+    const finalCity = accessContext.isDev || accessContext.scope === 'ALL'
+      ? scopeCity
+      : accessContext.city;
+    if (!finalCity) {
+      return { error: 'Debes seleccionar una ciudad para este usuario.' };
+    }
+    if (!accessContext.isDev && accessContext.scope === 'CITY' && finalCity !== accessContext.city) {
+      return { error: 'Tu perfil solo puede crear usuarios para tu misma ciudad.' };
+    }
+    return {
+      accessScope,
+      scopeCity: finalCity,
+      scopeVacancyId: null,
+      scopeVacancy: null
+    };
+  }
+
+  if (!scopeVacancyId) {
+    return { error: 'Debes seleccionar una vacante para este usuario.' };
+  }
+
+  const scopeVacancy = await prisma.vacancy.findUnique({
+    where: { id: scopeVacancyId },
+    select: { id: true, title: true, city: true }
+  });
+  if (!scopeVacancy) {
+    return { error: 'La vacante seleccionada no existe.' };
+  }
+  if (!canAccessVacancy(accessContext, scopeVacancy)) {
+    return { error: 'Tu perfil no puede crear usuarios fuera de tu alcance.' };
+  }
+
+  return {
+    accessScope: 'VACANCY',
+    scopeCity: null,
+    scopeVacancyId: scopeVacancy.id,
+    scopeVacancy
+  };
+}
+
+async function loadCandidateAccessSnapshot(prisma, candidateId) {
+  return prisma.candidate.findUnique({
+    where: { id: candidateId },
+    select: {
+      id: true,
+      vacancyId: true,
+      vacancy: {
+        select: {
+          id: true,
+          city: true
+        }
+      }
+    }
+  });
+}
+
+async function ensureCandidateIdAccess(prisma, req, candidateId, res, returnTo = '/admin') {
+  const candidate = await loadCandidateAccessSnapshot(prisma, candidateId);
+  if (!candidate) {
+    if (res) {
+      res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
+    }
+    return null;
+  }
+  if (!ensureCandidateAccess(req, candidate, res, returnTo)) {
+    return null;
+  }
+  return candidate;
+}
+
+async function loadVacancyAccessSnapshot(prisma, vacancyId) {
+  return prisma.vacancy.findUnique({
+    where: { id: vacancyId },
+    select: {
+      id: true,
+      title: true,
+      city: true,
+      isActive: true,
+      acceptingApplications: true
+    }
+  });
+}
+
+async function ensureVacancyIdAccess(prisma, req, vacancyId, res, returnTo = '/admin/vacancies') {
+  const vacancy = await loadVacancyAccessSnapshot(prisma, vacancyId);
+  if (!vacancy) {
+    if (res) {
+      res.redirect(withFlashMessage(returnTo, 'error', 'Vacante no encontrada.'));
+    }
+    return null;
+  }
+  if (!ensureVacancyAccess(req, vacancy, res, returnTo)) {
+    return null;
+  }
+  return vacancy;
+}
+
+function buildManageableUsersWhere(accessContext = {}) {
+  if (accessContext.isDev || accessContext.scope === 'ALL') return { role: 'ADMIN' };
+  if (accessContext.scope === 'CITY') {
+    return {
+      role: 'ADMIN',
+      OR: [
+        {
+          accessScope: 'CITY',
+          scopeCity: accessContext.city || '__OUT_OF_SCOPE__'
+        },
+        {
+          accessScope: 'VACANCY',
+          scopeVacancy: {
+            city: accessContext.city || '__OUT_OF_SCOPE__'
+          }
+        }
+      ]
+    };
+  }
+  return {
+    role: 'ADMIN',
+    accessScope: 'VACANCY',
+    scopeVacancyId: accessContext.vacancyId || '__OUT_OF_SCOPE__'
+  };
+}
+
+function isManualAttentionCandidate(candidate) {
+  if (!candidate?.botPaused) return false;
+  return !isFemaleHumanReviewCandidate(candidate);
+}
+
 function withFlashMessage(returnTo, type, message) {
   const safePath = safeAdminReturnPath(returnTo);
   const [pathname, queryString = ''] = safePath.split('?');
@@ -246,16 +473,77 @@ function buildCandidateDetailPath(candidateId, returnTo = null) {
 
 const STATUS_LABELS = {
   'NUEVO': 'Nuevo', 'REGISTRADO': 'Registrado', 'VALIDANDO': 'Registrado',
-  'APROBADO': 'Aprobado', 'RECHAZADO': 'Rechazado', 'CONTACTADO': 'Contactado'
+  'APROBADO': 'Aprobado', 'RECHAZADO': 'Rechazado', 'CONTACTADO': 'Contactado', 'CONTRATADO': 'Contratado'
 };
 
-const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'missing_cv_complete', 'new', 'contacted', 'rejected', 'all']);
-const RECRUITER_STATUS_SCOPES = new Set(['registered', 'missing_cv_complete', 'contacted', 'rejected', 'all']);
-const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected', 'all']);
+function formatAdminEventValue(value) {
+  const normalized = normalizeString(value);
+  if (!normalized) return null;
+  return STATUS_LABELS[normalized] || normalized;
+}
+
+function formatActorRoleLabel(role) {
+  const normalized = normalizeString(role);
+  if (!normalized) return 'Sistema';
+  if (normalized === 'dev') return 'Dev';
+  if (normalized === 'admin') return 'Reclutador';
+  return normalized;
+}
+
+function formatAdminEventLabel(event = {}) {
+  const normalizedType = normalizeString(event.eventType);
+  const fallback = normalizeString(event.eventLabel);
+  if (normalizedType === 'STATUS_CHANGED') return fallback || 'Cambio de estado';
+  if (normalizedType === 'WHATSAPP_OPENED') return 'Abrio WhatsApp del candidato';
+  if (normalizedType === 'INTERVIEW_ASSIGNED') return 'Asigno entrevista manualmente';
+  if (normalizedType === 'INTERVIEW_STATUS_CHANGED') return 'Actualizo estado de entrevista';
+  if (normalizedType === 'DEV_NOTES_UPDATED') return 'Actualizo observaciones dev';
+  if (normalizedType === 'GENDER_UPDATED') return 'Actualizo genero del candidato';
+  if (normalizedType === 'BOT_PAUSED') return 'Pauso el bot';
+  if (normalizedType === 'BOT_RESUMED') return 'Reanudo el bot';
+  if (normalizedType === 'VACANCY_ASSIGNED') return fallback || 'Actualizo vacante asignada';
+  return fallback || 'Movimiento manual';
+}
+
+async function logCandidateAdminEvent(prisma, {
+  candidateId,
+  actorRole,
+  eventType,
+  eventLabel,
+  fromValue = null,
+  toValue = null,
+  note = null
+} = {}) {
+  if (!candidateId || !eventType || !eventLabel || typeof prisma?.candidateAdminEvent?.create !== 'function') return;
+  try {
+    await prisma.candidateAdminEvent.create({
+      data: {
+        candidateId,
+        actorRole: normalizeString(actorRole) || 'system',
+        eventType,
+        eventLabel,
+        fromValue,
+        toValue,
+        note
+      }
+    });
+  } catch (error) {
+    console.error('[candidate_admin_event]', {
+      candidateId,
+      eventType,
+      error: error?.message || error
+    });
+  }
+}
+
+const ADMIN_STATUS_SCOPES = new Set(['inbox', 'registered', 'missing_cv_complete', 'new', 'contacted', 'contracted', 'rejected', 'all']);
+const RECRUITER_STATUS_SCOPES = new Set(['registered', 'missing_cv_complete', 'contacted', 'contracted', 'rejected', 'all']);
+const EXPORT_SCOPES = new Set(['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'contracted', 'rejected', 'all']);
+const ACTIVE_CANDIDATE_STATUSES = ['NUEVO', 'REGISTRADO', 'VALIDANDO', 'APROBADO', 'CONTACTADO', 'CONTRATADO'];
 
 const STATUS_SCOPE_SUMMARY_LABELS = {
   inbox: 'en bandeja', registered: 'registrados', missing_cv_complete: 'completos pendientes de HV',
-  approved: 'aprobados', new: 'nuevos', contacted: 'contactados',
+  approved: 'aprobados', new: 'nuevos', contacted: 'contactados', contracted: 'contratados',
   rejected: 'rechazados', all: 'totales'
 };
 const ACTIVE_BOOKING_STATUSES = ['SCHEDULED', 'CONFIRMED', 'RESCHEDULED'];
@@ -497,6 +785,7 @@ function decorateDashboardCandidate(candidate) {
     hasCv: candidateHasCv(normalizedCandidate),
     isFemaleCandidate: normalizedCandidate?.gender === 'FEMALE',
     isFemaleHumanReview: isFemaleHumanReviewCandidate(normalizedCandidate),
+    isManualAttention: isManualAttentionCandidate(normalizedCandidate),
     outboundWindowOpen,
     hasNewInbound: candidateHasUnreadInbound(normalizedCandidate),
     lastMessageAt: candidateLastMessageTime(normalizedCandidate) || null,
@@ -521,26 +810,33 @@ async function sendAdminOutboundMessage(prisma, candidate, body, rawPayload = {}
 
 async function buildDashboardData(prisma, dateStr, options = {}) {
   const { start, end } = colombiaDayBounds(dateStr);
-  const isDev = options.role === 'dev';
+  const accessContext = options.accessContext || getAccessContext({ userRole: options.role });
+  const isDev = accessContext.isDev;
   const candidateFilters = options.candidateFilters || null;
-  const shouldFilterCandidates = options.role === 'admin'
+  const shouldFilterCandidates = accessContext.isAdmin
     && candidateFilters
     && Object.values(candidateFilters).some(Boolean);
   const filterDashboardCandidates = (candidates) => (
     shouldFilterCandidates ? applyRecruiterCandidateFilters(candidates, candidateFilters) : candidates
   );
+  const vacancyAccessWhere = buildVacancyAccessWhere(accessContext);
 
   const vacancies = await prisma.vacancy.findMany({
     where: {
-      OR: [
-        { acceptingApplications: true },
+      AND: [
+        vacancyAccessWhere,
         {
-          interviewBookings: {
-            some: {
-              scheduledAt: { gte: start, lte: end },
-              status: { in: ALL_BOOKING_STATUSES }
+          OR: [
+            { acceptingApplications: true },
+            {
+              interviewBookings: {
+                some: {
+                  scheduledAt: { gte: start, lte: end },
+                  status: { in: ALL_BOOKING_STATUSES }
+                }
+              }
             }
-          }
+          ]
         }
       ]
     },
@@ -571,7 +867,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
         orderBy: { scheduledAt: 'asc' }
       },
       candidates: {
-        where: { status: { in: ['NUEVO', 'REGISTRADO', 'VALIDANDO', 'APROBADO', 'CONTACTADO'] } },
+        where: { status: { in: ACTIVE_CANDIDATE_STATUSES } },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, fullName: true, phone: true,
@@ -599,7 +895,7 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
     ? await prisma.candidate.findMany({
       where: {
         vacancyId: null,
-        status: { in: ['NUEVO', 'REGISTRADO', 'VALIDANDO', 'APROBADO', 'CONTACTADO'] }
+        status: { in: ACTIVE_CANDIDATE_STATUSES }
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -620,17 +916,23 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
     : [];
 
   const citiesMap = new Map();
+  const manualAttentionMap = new Map();
 
   for (const v of vacancies) {
     const city = v.city || 'Sin ciudad';
     if (!citiesMap.has(city)) citiesMap.set(city, []);
 
     const candidatesWithFlags = v.candidates.map(decorateDashboardCandidate);
+    for (const candidate of candidatesWithFlags) {
+      if (candidate.isManualAttention) {
+        manualAttentionMap.set(candidate.id, candidate);
+      }
+    }
     const bookedCandidateIds = new Set(candidatesWithFlags
       .filter((candidate) => candidate.interviewBookings.length > 0)
       .map((candidate) => candidate.id));
     const approvedCandidatesBase = candidatesWithFlags
-      .filter((candidate) => normalizeCandidateStatusForUI(candidate.status) === 'APROBADO')
+      .filter((candidate) => ['APROBADO', 'CONTRATADO'].includes(normalizeCandidateStatusForUI(candidate.status)))
       .filter((candidate) => !v.schedulingEnabled || !bookedCandidateIds.has(candidate.id));
     const pendingReviewCandidates = candidatesWithFlags
       .filter((candidate) => ['NUEVO', 'REGISTRADO'].includes(normalizeCandidateStatusForUI(candidate.status)));
@@ -685,15 +987,25 @@ async function buildDashboardData(prisma, dateStr, options = {}) {
   const cities = Array.from(citiesMap.entries()).map(([name, vacs]) => ({ name, vacancies: vacs }));
   const decoratedLegacyCandidates = filterDashboardCandidates(legacyCandidates.map(decorateDashboardCandidate));
   if (isDev) decoratedLegacyCandidates.sort(compareCandidatesByRecentInbound);
+  for (const candidate of decoratedLegacyCandidates) {
+    if (candidate.isManualAttention) {
+      manualAttentionMap.set(candidate.id, candidate);
+    }
+  }
+  const manualReviewCandidates = Array.from(manualAttentionMap.values()).sort(compareCandidatesByRecentInbound);
   return {
     cities,
-    legacyCandidates: decoratedLegacyCandidates
+    legacyCandidates: decoratedLegacyCandidates,
+    manualReviewCandidates
   };
 }
 
-async function loadApprovedOutreachCandidates(prisma) {
+async function loadApprovedOutreachCandidates(prisma, accessContext = null) {
   const candidates = await prisma.candidate.findMany({
-    where: { status: 'APROBADO' },
+    where: {
+      ...buildCandidateAccessWhere(accessContext || { scope: 'ALL', isDev: true }),
+      status: 'APROBADO'
+    },
     select: {
       id: true,
       fullName: true,
@@ -827,9 +1139,13 @@ async function buildUniqueVacancyKey(prisma, title, city, excludeId = null) {
     suffix += 1;
   }
 }
-async function loadOperations(prisma) {
+async function loadOperations(prisma, options = {}) {
   try {
+    const allowedCities = Array.isArray(options.allowedCities) ? options.allowedCities.filter(Boolean) : [];
     return await prisma.operation.findMany({
+      where: allowedCities.length
+        ? { city: { name: { in: allowedCities } } }
+        : undefined,
       orderBy: [{ city: { name: 'asc' } }, { name: 'asc' }],
       include: { city: { select: { name: true } } }
     });
@@ -857,9 +1173,10 @@ async function fetchMonitorMessages(prisma) {
   });
 }
 
-async function loadBotChatCount(prisma) {
+async function loadBotChatCount(prisma, accessContext = null) {
   return prisma.candidate.count({
     where: {
+      ...buildCandidateAccessWhere(accessContext || { scope: 'ALL', isDev: true }),
       messages: {
         some: {}
       }
@@ -878,18 +1195,20 @@ export function adminRouter(prisma) {
 
   // ── Dashboard principal ──────────────────────────────────────
   router.get('/', async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
     const requestedStatus = normalizeString(req.query.status);
     const adminFilters = normalizeCandidateListFilters(req.query);
     const vacancyFiltersById = normalizeVacancyDashboardFilters(req.query);
     const candidateSearch = normalizeCandidateSearch(req.query);
     const vacancySearchById = normalizeVacancySearches(req.query);
-    const botChatCount = await loadBotChatCount(prisma);
+    const botChatCount = await loadBotChatCount(prisma, accessContext);
     const canUseLegacyScope = requestedStatus
       && ADMIN_STATUS_SCOPES.has(requestedStatus)
       && (req.userRole === 'dev' || RECRUITER_STATUS_SCOPES.has(requestedStatus));
 
     if (canUseLegacyScope) {
       const legacyQuery = {
+        where: buildCandidateAccessWhere(accessContext),
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -921,7 +1240,10 @@ export function adminRouter(prisma) {
         }
       };
       if (requestedStatus === 'inbox' && req.userRole === 'dev') {
-        legacyQuery.where = { lastInboundAt: { not: null } };
+        legacyQuery.where = {
+          ...buildCandidateAccessWhere(accessContext),
+          lastInboundAt: { not: null }
+        };
         legacyQuery.orderBy = [{ lastInboundAt: 'desc' }, { createdAt: 'desc' }];
       }
       if (req.userRole !== 'dev' && !['registered', 'missing_cv_complete'].includes(requestedStatus)) {
@@ -940,14 +1262,12 @@ export function adminRouter(prisma) {
       if (candidateSearch.text) {
         candidates = candidates.filter((candidate) => candidateMatchesSearch(candidate, candidateSearch));
       }
-      if (req.userRole === 'dev') {
-        candidates.sort(compareCandidatesByRecentInbound);
-      }
+      candidates.sort(compareCandidatesByRecentInbound);
       return res.render('list', {
         mode: 'legacy', candidates, formatDateTimeCO, role: req.userRole,
         activeStatusScope: requestedStatus,
         summaryLabel: STATUS_SCOPE_SUMMARY_LABELS[requestedStatus] || STATUS_SCOPE_SUMMARY_LABELS.all,
-        normalizeCandidateStatusForUI, cities: [], legacyCandidates: [],
+        normalizeCandidateStatusForUI, cities: [], legacyCandidates: [], manualReviewCandidates: [],
         activeCity: null, selectedDate: todayCO(), todayStr: todayCO(),
         successMsg: normalizeString(req.query.success),
         errorMsg: normalizeString(req.query.error),
@@ -962,8 +1282,9 @@ export function adminRouter(prisma) {
 
     const rawDate = normalizeString(req.query.date);
     const selectedDate = isValidDateString(rawDate) ? rawDate : todayCO();
-    const { cities, legacyCandidates } = await buildDashboardData(prisma, selectedDate, {
-      role: req.userRole
+    const { cities, legacyCandidates, manualReviewCandidates } = await buildDashboardData(prisma, selectedDate, {
+      role: req.userRole,
+      accessContext
     });
 
     const rawCity = normalizeString(req.query.city);
@@ -972,7 +1293,7 @@ export function adminRouter(prisma) {
       ? rawCity : (availableCities[0] || null);
 
     return res.render('list', {
-      mode: 'vacancies', cities, legacyCandidates, activeCity, selectedDate,
+      mode: 'vacancies', cities, legacyCandidates, manualReviewCandidates, activeCity, selectedDate,
       todayStr: todayCO(), formatDateTimeCO, formatTimeCO, role: req.userRole,
       normalizeCandidateStatusForUI, candidates: [], activeStatusScope: null, summaryLabel: '',
       successMsg: normalizeString(req.query.success),
@@ -1017,10 +1338,12 @@ export function adminRouter(prisma) {
 
   // ── Exportar candidatos ──────────────────────────────────────
   router.get('/export', async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
     const scope = normalizeString(req.query.scope) || 'all';
     if (!EXPORT_SCOPES.has(scope)) return res.status(400).send('Scope inválido.');
 
     const allCandidates = await prisma.candidate.findMany({
+      where: buildCandidateAccessWhere(accessContext),
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -1101,6 +1424,7 @@ export function adminRouter(prisma) {
       VALIDANDO: 'FFDBEAFE',
       APROBADO: 'FFD1FAE5',
       CONTACTADO: 'FFEDE9FE',
+      CONTRATADO: 'FFE0F2FE',
       RECHAZADO: 'FFFEE2E2',
       NUEVO: 'FFF3F4F6'
     };
@@ -1142,8 +1466,9 @@ export function adminRouter(prisma) {
 
   // ── Detalle de candidato ─────────────────────────────────────
   router.get('/outreach/approved', async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
     const outreachFilters = normalizeOutreachFilters(req.query);
-    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma);
+    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma, accessContext);
     const cityOptions = [...new Set(allApprovedCandidates
       .map((candidate) => candidate?.vacancy?.city)
       .filter(Boolean))]
@@ -1171,12 +1496,13 @@ export function adminRouter(prisma) {
   });
 
   router.post('/outreach/approved/prepare', express.urlencoded({ extended: true }), async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
     const outreachFilters = normalizeOutreachFilters(req.body);
     const selectedCandidateIds = Array.isArray(req.body.candidateIds)
       ? req.body.candidateIds
       : (req.body.candidateIds ? [req.body.candidateIds] : []);
     const selectedIds = new Set(selectedCandidateIds.map((value) => String(value || '').trim()).filter(Boolean));
-    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma);
+    const allApprovedCandidates = await loadApprovedOutreachCandidates(prisma, accessContext);
     const cityOptions = [...new Set(allApprovedCandidates
       .map((candidate) => candidate?.vacancy?.city)
       .filter(Boolean))]
@@ -1217,6 +1543,7 @@ export function adminRouter(prisma) {
 
   router.get('/candidates/:id', async (req, res) => {
     const returnToPath = safeAdminReturnPath(req.query.returnTo || '/admin');
+    const accessContext = getRequestAccessContext(req);
     const candidate = await prisma.candidate.findUnique({
       where: { id: req.params.id },
       include: {
@@ -1246,6 +1573,9 @@ export function adminRouter(prisma) {
       }
     });
     if (!candidate) return res.status(404).send('Candidato no encontrado.');
+    if (!canAccessCandidate(accessContext, candidate)) {
+      return res.redirect(withFlashMessage(returnToPath, 'error', 'No tienes acceso a ese candidato.'));
+    }
 
     if (req.userRole === 'dev') {
       const seenAt = new Date();
@@ -1263,6 +1593,13 @@ export function adminRouter(prisma) {
     const outboundWindow = req.userRole === 'dev'
       ? await getOutboundWindowStatus(prisma, candidate.id)
       : null;
+    const adminEvents = req.userRole === 'dev' && typeof prisma?.candidateAdminEvent?.findMany === 'function'
+      ? await prisma.candidateAdminEvent.findMany({
+        where: { candidateId: candidate.id },
+        orderBy: { createdAt: 'desc' },
+        take: 30
+      })
+      : [];
     const availableInterviewSlots = candidate.vacancyId && candidate.vacancy?.schedulingEnabled
       ? (await listOfferableSlots(
         prisma,
@@ -1274,9 +1611,14 @@ export function adminRouter(prisma) {
     const availableVacancies = req.userRole === 'dev'
       ? await prisma.vacancy.findMany({
         where: {
-          OR: [
-            { isActive: true },
-            { acceptingApplications: true }
+          AND: [
+            buildVacancyAccessWhere(accessContext),
+            {
+              OR: [
+                { isActive: true },
+                { acceptingApplications: true }
+              ]
+            }
           ]
         },
         orderBy: [{ city: 'asc' }, { title: 'asc' }],
@@ -1314,8 +1656,11 @@ export function adminRouter(prisma) {
     res.render('detail', {
       candidate: detailCandidate, role: req.userRole, formatDateTimeCO,
       normalizeCandidateStatusForUI, cvSizeBytes,
+      formatActorRoleLabel,
+      formatAdminEventLabel,
       availableVacancies,
       availableInterviewSlots,
+      adminEvents,
       returnToPath,
       outboundWindow, cvSuccess, cvError,
       outboundSuccess, outboundError, botPauseSuccess, botPauseError,
@@ -1335,15 +1680,24 @@ export function adminRouter(prisma) {
 
     const booking = await prisma.interviewBooking.findUnique({
       where: { id },
-      select: { id: true }
+      select: { id: true, candidateId: true, status: true }
     });
     if (!booking) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Entrevista no encontrada.'));
     }
+    if (!await ensureCandidateIdAccess(prisma, req, booking.candidateId, res, returnTo)) return;
 
     await prisma.interviewBooking.update({
       where: { id },
       data: { status: nextStatus }
+    });
+    await logCandidateAdminEvent(prisma, {
+      candidateId: booking.candidateId,
+      actorRole: req.userRole,
+      eventType: 'INTERVIEW_STATUS_CHANGED',
+      eventLabel: 'ActualizÃ³ estado de entrevista',
+      fromValue: booking.status,
+      toValue: nextStatus
     });
 
     return res.redirect(withFlashMessage(returnTo, 'success', 'Entrevista actualizada correctamente.'));
@@ -1420,6 +1774,9 @@ export function adminRouter(prisma) {
       if (!candidate) {
         return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
       }
+      if (!ensureCandidateAccess(req, candidate, res, returnTo)) {
+        return;
+      }
 
       if (!candidate.vacancyId || !candidate.vacancy?.schedulingEnabled) {
         return res.redirect(withFlashMessage(returnTo, 'error', 'La vacante del candidato no tiene agenda habilitada.'));
@@ -1489,6 +1846,14 @@ export function adminRouter(prisma) {
         }
       }
 
+      await logCandidateAdminEvent(prisma, {
+        candidateId: candidate.id,
+        actorRole: req.userRole,
+        eventType: 'INTERVIEW_ASSIGNED',
+        eventLabel: 'AsignÃ³ entrevista manualmente',
+        note: chosenOffer.formattedDate
+      });
+
     return res.redirect(withFlashMessage(returnTo, 'success', `Entrevista asignada para ${chosenOffer.formattedDate}.`));
     } catch (error) {
       console.error('[manual_interview_assign]', {
@@ -1507,10 +1872,33 @@ export function adminRouter(prisma) {
     const status = normalizeString(req.body.status);
     const returnTo = safeAdminReturnPath(req.body.returnTo || '/admin');
     const allowed = req.userRole === 'dev'
-      ? ['NUEVO', 'REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO']
-      : ['REGISTRADO', 'APROBADO', 'CONTACTADO', 'RECHAZADO'];
+      ? ['NUEVO', 'REGISTRADO', 'APROBADO', 'CONTACTADO', 'CONTRATADO', 'RECHAZADO']
+      : ['REGISTRADO', 'APROBADO', 'CONTACTADO', 'CONTRATADO', 'RECHAZADO'];
     if (!status || !allowed.includes(status)) return res.redirect(buildCandidateDetailPath(id, returnTo));
+    const existingCandidate = await prisma.candidate.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        fullName: true,
+        vacancyId: true,
+        vacancy: { select: { id: true, city: true } }
+      }
+    });
+    if (!existingCandidate) return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
+    if (!ensureCandidateAccess(req, existingCandidate, res, returnTo)) return;
+
     await prisma.candidate.update({ where: { id }, data: { status } });
+    if (existingCandidate.status !== status) {
+      await logCandidateAdminEvent(prisma, {
+        candidateId: id,
+        actorRole: req.userRole,
+        eventType: 'STATUS_CHANGED',
+        eventLabel: 'Cambio de estado',
+        fromValue: formatAdminEventValue(existingCandidate.status),
+        toValue: formatAdminEventValue(status)
+      });
+    }
     res.redirect(buildCandidateDetailPath(id, returnTo));
   });
 
@@ -1521,12 +1909,19 @@ export function adminRouter(prisma) {
     const whatsappText = typeof req.query.text === 'string' ? req.query.text.trim() : '';
     const candidate = await prisma.candidate.findUnique({
       where: { id },
-      select: { id: true, phone: true }
+      select: {
+        id: true,
+        phone: true,
+        status: true,
+        vacancyId: true,
+        vacancy: { select: { id: true, city: true } }
+      }
     });
 
     if (!candidate) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
+    if (!ensureCandidateAccess(req, candidate, res, returnTo)) return;
 
     const whatsappBaseUrl = buildWhatsAppLink(candidate.phone);
     if (!whatsappBaseUrl) {
@@ -1539,6 +1934,16 @@ export function adminRouter(prisma) {
         ? { devLastSeenAt: new Date() }
         : { status: 'CONTACTADO' }
     });
+    if (req.userRole !== 'dev' && candidate.status !== 'CONTACTADO') {
+      await logCandidateAdminEvent(prisma, {
+        candidateId: id,
+        actorRole: req.userRole,
+        eventType: 'WHATSAPP_OPENED',
+        fromValue: formatAdminEventValue(candidate.status),
+        eventLabel: 'AbriÃ³ WhatsApp del candidato',
+        toValue: 'Contactado'
+      });
+    }
 
     const whatsappUrl = whatsappText
       ? `${whatsappBaseUrl}?text=${encodeURIComponent(whatsappText)}`
@@ -1574,6 +1979,7 @@ export function adminRouter(prisma) {
     if (!candidate) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
+    if (!ensureCandidateAccess(req, candidate, res, returnTo)) return;
 
     if (!candidate.vacancy) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'El candidato no tiene una vacante asignada.'));
@@ -1609,11 +2015,22 @@ export function adminRouter(prisma) {
 
     const candidate = await prisma.candidate.findUnique({
       where: { id },
-      select: { id: true }
+      select: {
+        id: true,
+        vacancyId: true,
+        vacancy: {
+          select: {
+            title: true,
+            role: true,
+            city: true
+          }
+        }
+      }
     });
     if (!candidate) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
+    if (!ensureCandidateAccess(req, candidate, res, returnTo)) return;
 
     if (!vacancyId) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Debes seleccionar una vacante.'));
@@ -1621,15 +2038,35 @@ export function adminRouter(prisma) {
 
     const vacancy = await prisma.vacancy.findUnique({
       where: { id: vacancyId },
-      select: { id: true, isActive: true, acceptingApplications: true }
+      select: {
+        id: true,
+        title: true,
+        role: true,
+        city: true,
+        isActive: true,
+        acceptingApplications: true
+      }
     });
     if (!vacancy || (!vacancy.isActive && !vacancy.acceptingApplications)) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'La vacante seleccionada no está disponible para asignación.'));
     }
 
+    if (!ensureVacancyAccess(req, vacancy, res, returnTo)) return;
     await prisma.candidate.update({
       where: { id },
       data: { vacancyId: vacancy.id }
+    });
+    const previousVacancyLabel = candidate.vacancy
+      ? `${candidate.vacancy.title || candidate.vacancy.role}${candidate.vacancy.city ? ` (${candidate.vacancy.city})` : ''}`
+      : null;
+    const nextVacancyLabel = `${vacancy.title || vacancy.role}${vacancy.city ? ` (${vacancy.city})` : ''}`;
+    await logCandidateAdminEvent(prisma, {
+      candidateId: id,
+      actorRole: req.userRole,
+      eventType: 'VACANCY_ASSIGNED',
+      eventLabel: candidate.vacancyId ? 'Cambio vacante asignada' : 'Asigno vacante al candidato',
+      fromValue: previousVacancyLabel,
+      toValue: nextVacancyLabel
     });
 
     return res.redirect(withFlashMessage(returnTo, 'success', 'Vacante asignada correctamente.'));
@@ -1675,10 +2112,12 @@ export function adminRouter(prisma) {
     const existingCandidate = await prisma.candidate.findUnique({
       where: { id },
       select: {
-        id: true,
-        gender: true,
-        botPaused: true,
-        botPauseReason: true,
+      id: true,
+      status: true,
+      gender: true,
+      interviewNotes: true,
+      botPaused: true,
+      botPauseReason: true,
         cvData: true,
         cvOriginalName: true,
         cvMimeType: true,
@@ -1691,6 +2130,7 @@ export function adminRouter(prisma) {
     if (!existingCandidate) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
+    if (!ensureCandidateAccess(req, existingCandidate, res, returnTo)) return;
 
     const residenceInput = normalizeString(raw.residenceArea) || normalizeString(raw.locality) || normalizeString(raw.neighborhood);
     let candidateCoreFields = normalizeCandidateFields({
@@ -1729,6 +2169,35 @@ export function adminRouter(prisma) {
 
     const data = { ...candidateCoreFields, ...adminStatusFields };
     await prisma.candidate.update({ where: { id }, data });
+    if (existingCandidate.status !== data.status && data.status) {
+      await logCandidateAdminEvent(prisma, {
+        candidateId: id,
+        actorRole: req.userRole,
+        eventType: 'STATUS_CHANGED',
+        eventLabel: 'EdiciÃ³n manual de estado',
+        fromValue: formatAdminEventValue(existingCandidate.status),
+        toValue: formatAdminEventValue(data.status)
+      });
+    }
+    if (req.userRole === 'dev' && existingCandidate.interviewNotes !== data.interviewNotes && data.interviewNotes !== undefined) {
+      await logCandidateAdminEvent(prisma, {
+        candidateId: id,
+        actorRole: req.userRole,
+        eventType: 'DEV_NOTES_UPDATED',
+        eventLabel: 'ActualizÃ³ observaciones dev',
+        note: data.interviewNotes ? 'Observaciones actualizadas.' : 'Observaciones eliminadas.'
+      });
+    }
+    if (req.userRole === 'dev' && existingCandidate.gender !== data.gender && data.gender) {
+      await logCandidateAdminEvent(prisma, {
+        candidateId: id,
+        actorRole: req.userRole,
+        eventType: 'GENDER_UPDATED',
+        eventLabel: 'ActualizÃ³ gÃ©nero del candidato',
+        fromValue: existingCandidate.gender,
+        toValue: data.gender
+      });
+    }
     res.redirect(buildCandidateDetailPath(id, returnTo));
   });
 
@@ -1736,6 +2205,7 @@ export function adminRouter(prisma) {
   router.post('/candidates/:id/bot-pause', ensureDevRole, express.urlencoded({ extended: true }), async (req, res) => {
     const { id } = req.params;
     const reason = normalizeString(req.body.reason) || 'Pausa manual desde admin';
+    if (!await ensureCandidateIdAccess(prisma, req, id, res, `/admin/candidates/${id}`)) return;
     await prisma.candidate.update({
       where: { id },
       data: {
@@ -1747,11 +2217,19 @@ export function adminRouter(prisma) {
         reminderState: 'CANCELLED'
       }
     });
+    await logCandidateAdminEvent(prisma, {
+      candidateId: id,
+      actorRole: req.userRole,
+      eventType: 'BOT_PAUSED',
+      eventLabel: 'PausÃ³ el bot',
+      note: reason
+    });
     res.redirect(`/admin/candidates/${id}?botPauseSuccess=` + encodeURIComponent('Bot pausado correctamente.'));
   });
 
   router.post('/candidates/:id/bot-resume', ensureDevRole, async (req, res) => {
     const { id } = req.params;
+    if (!await ensureCandidateIdAccess(prisma, req, id, res, `/admin/candidates/${id}`)) return;
     await prisma.candidate.update({
       where: { id },
       data: {
@@ -1762,12 +2240,20 @@ export function adminRouter(prisma) {
         reminderState: 'CANCELLED'
       }
     });
+    await logCandidateAdminEvent(prisma, {
+      candidateId: id,
+      actorRole: req.userRole,
+      eventType: 'BOT_RESUMED',
+      eventLabel: 'ReanudÃ³ el bot'
+    });
     res.redirect(`/admin/candidates/${id}?botPauseSuccess=` + encodeURIComponent('Bot reanudado correctamente.'));
   });
 
   // ── CV: descargar ────────────────────────────────────────────
   router.get('/candidates/:id/cv', async (req, res) => {
     const candidate = await prisma.candidate.findUnique({ where: { id: req.params.id } });
+    if (!candidate) return res.status(404).send('CV no encontrado.');
+    if (!await ensureCandidateIdAccess(prisma, req, req.params.id, null)) return res.status(403).send('Sin acceso.');
     if (!candidateHasCv(candidate)) return res.status(404).send('CV no encontrado.');
     const buffer = await resolveCandidateCvBuffer(candidate);
     if (!buffer) return res.status(404).send('CV no encontrado.');
@@ -1792,6 +2278,7 @@ export function adminRouter(prisma) {
     });
   }, async (req, res) => {
     const { id } = req.params;
+    if (!await ensureCandidateIdAccess(prisma, req, id, res, `/admin/candidates/${id}`)) return;
     const file = req.file;
     if (!file) {
       return res.redirect(`/admin/candidates/${id}?` + buildCvStatusQuery('cvError', 'No se recibió ningún archivo.'));
@@ -1820,6 +2307,7 @@ export function adminRouter(prisma) {
 
   // ── CV: eliminar ─────────────────────────────────────────────
   router.post('/candidates/:id/cv/delete', async (req, res) => {
+    if (!await ensureCandidateIdAccess(prisma, req, req.params.id, res, `/admin/candidates/${req.params.id}`)) return;
     const candidate = await prisma.candidate.findUnique({
       where: { id: req.params.id },
       select: { id: true, cvStorageKey: true }
@@ -1849,6 +2337,7 @@ export function adminRouter(prisma) {
       }
     });
     if (!candidate) return res.redirect(`/admin/candidates/${id}?outboundError=Candidato no encontrado.`);
+    if (!ensureCandidateAccess(req, candidate, res, `/admin/candidates/${id}`)) return;
 
     const window = await getOutboundWindowStatus(prisma, id);
     if (!window.isOpen) {
@@ -1894,6 +2383,7 @@ export function adminRouter(prisma) {
     if (!candidate) {
       return res.redirect(withFlashMessage(returnTo, 'error', 'Candidato no encontrado.'));
     }
+    if (!await ensureCandidateIdAccess(prisma, req, id, res, returnTo)) return;
 
     const window = await getOutboundWindowStatus(prisma, id);
     if (!window.isOpen) {
@@ -1915,9 +2405,237 @@ export function adminRouter(prisma) {
   });
 
   // ── CRUD de vacantes ─────────────────────────────────────────
+  router.get('/users', async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
+    const [users, vacancies] = await Promise.all([
+      prisma.appUser.findMany({
+        where: buildManageableUsersWhere(accessContext),
+        orderBy: [{ createdAt: 'desc' }, { username: 'asc' }],
+        include: {
+          scopeVacancy: {
+            select: {
+              id: true,
+              title: true,
+              city: true
+            }
+          }
+        }
+      }),
+      prisma.vacancy.findMany({
+        where: buildVacancyAccessWhere(accessContext),
+        orderBy: [{ city: 'asc' }, { title: 'asc' }],
+        select: {
+          id: true,
+          title: true,
+          role: true,
+          city: true
+        }
+      })
+    ]);
+
+    const manageableScopeOptions = getManageableScopeOptions(req, vacancies);
+    res.render('users', {
+      role: req.userRole,
+      users,
+      vacancies,
+      manageableScopeOptions,
+      describeUserScope,
+      successMsg: normalizeString(req.query.success),
+      errorMsg: normalizeString(req.query.error),
+      revealedRecoveryCode: normalizeString(req.query.recoveryCode),
+      highlightedUsername: normalizeString(req.query.username),
+      currentUsername: req.username || '',
+      currentUserId: req.userId || ''
+    });
+  });
+
+  router.post('/users/create', express.urlencoded({ extended: true }), async (req, res) => {
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    if (password.length < 6) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('La contrasena inicial debe tener al menos 6 caracteres.'));
+    }
+
+    const scopeResolution = await resolveRequestedUserScope(prisma, req, req.body);
+    if (scopeResolution.error) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent(scopeResolution.error));
+    }
+
+    const username = await buildUniqueRecruiterUsername(prisma, {
+      accessScope: scopeResolution.accessScope,
+      scopeCity: scopeResolution.scopeCity,
+      vacancyTitle: scopeResolution.scopeVacancy?.title
+    });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const recoveryCode = generateRecoveryCode();
+    const recoveryCodeHash = await bcrypt.hash(recoveryCode, 10);
+
+    await prisma.appUser.create({
+      data: {
+        username,
+        passwordHash,
+        recoveryCodeHash,
+        role: 'ADMIN',
+        accessScope: scopeResolution.accessScope,
+        scopeCity: scopeResolution.scopeCity,
+        scopeVacancyId: scopeResolution.scopeVacancyId,
+        recoveryPhone: normalizeString(req.body.recoveryPhone),
+        recoveryEmail: normalizeString(req.body.recoveryEmail),
+        createdByUsername: req.username || req.userRole || 'system',
+        lastPasswordResetAt: new Date(),
+        isActive: true
+      }
+    });
+
+    const params = new URLSearchParams();
+    params.set('success', `Usuario ${username} creado correctamente.`);
+    params.set('username', username);
+    params.set('recoveryCode', recoveryCode);
+    return res.redirect(`/admin/users?${params.toString()}`);
+  });
+
+  router.post('/users/:id/reset-password', express.urlencoded({ extended: true }), async (req, res) => {
+    const { id } = req.params;
+    const newPassword = typeof req.body.newPassword === 'string' ? req.body.newPassword : '';
+    if (newPassword.length < 6) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('La nueva contrasena debe tener al menos 6 caracteres.'));
+    }
+
+    const accessContext = getRequestAccessContext(req);
+    const user = await prisma.appUser.findUnique({
+      where: { id },
+      include: {
+        scopeVacancy: {
+          select: {
+            id: true,
+            title: true,
+            city: true
+          }
+        }
+      }
+    });
+    if (!user) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Usuario no encontrado.'));
+    }
+    if (user.role !== 'ADMIN') {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Solo puedes administrar usuarios reclutadores.'));
+    }
+
+    const userIsManageable = accessContext.isDev || accessContext.scope === 'ALL'
+      ? true
+      : (accessContext.scope === 'CITY'
+        ? (user.accessScope === 'CITY' && user.scopeCity === accessContext.city)
+          || (user.accessScope === 'VACANCY' && user.scopeVacancy?.city === accessContext.city)
+        : user.accessScope === 'VACANCY' && user.scopeVacancyId === accessContext.vacancyId);
+    if (!userIsManageable) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('No puedes resetear la contrasena de ese usuario.'));
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.appUser.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        lastPasswordResetAt: new Date()
+      }
+    });
+
+    return res.redirect('/admin/users?success=' + encodeURIComponent(`Contrasena actualizada para ${user.username}.`) + '&username=' + encodeURIComponent(user.username));
+  });
+
+  router.post('/users/:id/reset-recovery-code', express.urlencoded({ extended: true }), async (req, res) => {
+    const { id } = req.params;
+    const accessContext = getRequestAccessContext(req);
+    const user = await prisma.appUser.findUnique({
+      where: { id },
+      include: {
+        scopeVacancy: {
+          select: {
+            id: true,
+            title: true,
+            city: true
+          }
+        }
+      }
+    });
+    if (!user) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Usuario no encontrado.'));
+    }
+    if (user.role !== 'ADMIN') {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Solo puedes administrar usuarios reclutadores.'));
+    }
+
+    const userIsManageable = accessContext.isDev || accessContext.scope === 'ALL'
+      ? true
+      : (accessContext.scope === 'CITY'
+        ? (user.accessScope === 'CITY' && user.scopeCity === accessContext.city)
+          || (user.accessScope === 'VACANCY' && user.scopeVacancy?.city === accessContext.city)
+        : user.accessScope === 'VACANCY' && user.scopeVacancyId === accessContext.vacancyId);
+    if (!userIsManageable) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('No puedes regenerar el codigo de ese usuario.'));
+    }
+
+    const recoveryCode = generateRecoveryCode();
+    const recoveryCodeHash = await bcrypt.hash(recoveryCode, 10);
+    await prisma.appUser.update({
+      where: { id: user.id },
+      data: { recoveryCodeHash }
+    });
+
+    const params = new URLSearchParams();
+    params.set('success', `Codigo de recuperacion regenerado para ${user.username}.`);
+    params.set('username', user.username);
+    params.set('recoveryCode', recoveryCode);
+    return res.redirect(`/admin/users?${params.toString()}`);
+  });
+
+  router.post('/users/:id/toggle', express.urlencoded({ extended: true }), async (req, res) => {
+    const { id } = req.params;
+    const accessContext = getRequestAccessContext(req);
+    const user = await prisma.appUser.findUnique({
+      where: { id },
+      include: {
+        scopeVacancy: {
+          select: {
+            id: true,
+            title: true,
+            city: true
+          }
+        }
+      }
+    });
+    if (!user) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Usuario no encontrado.'));
+    }
+    if (user.role !== 'ADMIN') {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('Solo puedes administrar usuarios reclutadores.'));
+    }
+
+    const userIsManageable = accessContext.isDev || accessContext.scope === 'ALL'
+      ? true
+      : (accessContext.scope === 'CITY'
+        ? (user.accessScope === 'CITY' && user.scopeCity === accessContext.city)
+          || (user.accessScope === 'VACANCY' && user.scopeVacancy?.city === accessContext.city)
+        : user.accessScope === 'VACANCY' && user.scopeVacancyId === accessContext.vacancyId);
+    if (!userIsManageable) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('No puedes actualizar ese usuario.'));
+    }
+    if (req.userId && req.userId === user.id) {
+      return res.redirect('/admin/users?error=' + encodeURIComponent('No puedes desactivar tu propio usuario desde esta sesion.'));
+    }
+
+    await prisma.appUser.update({
+      where: { id: user.id },
+      data: { isActive: !user.isActive }
+    });
+
+    return res.redirect('/admin/users?success=' + encodeURIComponent(`Usuario ${user.username} ${user.isActive ? 'desactivado' : 'activado'} correctamente.`) + '&username=' + encodeURIComponent(user.username));
+  });
+
   router.get('/vacancies', async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
     const [vacancies, operations, pendingCvMigrationCount] = await Promise.all([
       prisma.vacancy.findMany({
+        where: buildVacancyAccessWhere(accessContext),
         orderBy: [{ city: 'asc' }, { title: 'asc' }],
         include: {
           interviewSlots: {
@@ -1929,12 +2647,27 @@ export function adminRouter(prisma) {
           }
         }
       }),
-      loadOperations(prisma),
+      loadOperations(prisma, {
+        allowedCities: accessContext.scope === 'CITY'
+          ? [accessContext.city]
+          : []
+      }),
       req.userRole === 'dev' ? loadPendingCvMigrationCount(prisma) : 0
     ]);
     const successMsg = normalizeString(req.query.success);
     const errorMsg   = normalizeString(req.query.error);
-    res.render('vacancies', { vacancies, operations, role: req.userRole, successMsg, errorMsg, pendingCvMigrationCount, storageConfigured: isStorageConfigured() });
+    res.render('vacancies', {
+      vacancies,
+      operations,
+      role: req.userRole,
+      successMsg,
+      errorMsg,
+      pendingCvMigrationCount,
+      storageConfigured: isStorageConfigured(),
+      accessScope: accessContext.scope,
+      accessCity: accessContext.city,
+      canCreateVacancies: accessContext.isDev || accessContext.scope !== 'VACANCY'
+    });
   });
 
   router.post('/storage/migrate-cvs', ensureDevRole, async (_req, res) => {
@@ -1959,10 +2692,18 @@ export function adminRouter(prisma) {
   });
 
   router.post('/vacancies/create', express.urlencoded({ extended: true }), async (req, res) => {
+    const accessContext = getRequestAccessContext(req);
+    if (!accessContext.isDev && accessContext.scope === 'VACANCY') {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Ese perfil solo puede administrar su vacante asignada.'));
+    }
     const data = parseVacancyBody(req.body);
     const operation = await loadOperation(prisma, data.operationId);
+    const requestedCityAccess = operation ? canAccessVacancy(accessContext, { city: operation.city.name }) : false;
     if (!data.title || !operation) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título y operación son obligatorios.'));
+    }
+    if (!requestedCityAccess) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('No tienes acceso para crear vacantes en esa ciudad.'));
     }
     if (!hasValidInterviewConfig(data)) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Debes configurar al menos un día y una hora de entrevista válida.'));
@@ -2000,8 +2741,12 @@ export function adminRouter(prisma) {
 
   router.post('/vacancies/:id/edit', express.urlencoded({ extended: true }), async (req, res) => {
     const { id } = req.params;
+    const currentVacancy = await ensureVacancyIdAccess(prisma, req, id, res, '/admin/vacancies');
+    if (!currentVacancy) return;
+    const accessContext = getRequestAccessContext(req);
     const data = parseVacancyBody(req.body);
     const operation = await loadOperation(prisma, data.operationId);
+    const canMoveToRequestedCity = operation ? canAccessVacancy(accessContext, { city: operation.city.name }) : false;
     if (!data.title || !operation) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Título y operación son obligatorios.'));
     }
@@ -2009,6 +2754,9 @@ export function adminRouter(prisma) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Debes configurar al menos un día y una hora de entrevista válida.'));
     }
     const city = operation.city.name;
+    if (!canMoveToRequestedCity) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('No tienes acceso para mover esta vacante a esa ciudad.'));
+    }
     const key = await buildUniqueVacancyKey(prisma, data.title, city, id);
     await prisma.$transaction(async (tx) => {
       await tx.vacancy.update({
@@ -2042,10 +2790,7 @@ export function adminRouter(prisma) {
 
   router.post('/vacancies/:id/delete', async (req, res) => {
     const { id } = req.params;
-    const vacancy = await prisma.vacancy.findUnique({
-      where: { id },
-      select: { id: true },
-    });
+    const vacancy = await ensureVacancyIdAccess(prisma, req, id, res, '/admin/vacancies');
     if (!vacancy) return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Vacante no encontrada.'));
 
     const [candidateCount, interviewSlotCount, interviewBookingCount] = await Promise.all([
@@ -2064,7 +2809,7 @@ export function adminRouter(prisma) {
 
   router.post('/vacancies/:id/toggle', async (req, res) => {
     const { id } = req.params;
-    const vacancy = await prisma.vacancy.findUnique({ where: { id } });
+    const vacancy = await ensureVacancyIdAccess(prisma, req, id, res, '/admin/vacancies');
     if (!vacancy) return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Vacante no encontrada.'));
     const isCurrentlyOpen = vacancy.isActive && vacancy.acceptingApplications;
     await prisma.vacancy.update({

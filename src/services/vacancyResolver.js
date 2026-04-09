@@ -6,8 +6,16 @@ const ROLE_STOPWORDS = new Set([
   'interesada', 'interesado', 'la', 'las', 'loginpro', 'los', 'me', 'mi',
   'necesito', 'para', 'por', 'postular', 'postularme', 'puesto', 'que',
   'quiero', 'rol', 'seria', 'solicito', 'su', 'trabajar', 'trabajo', 'una',
-  'uno', 'vacante', 'y'
+  'uno', 'vacante', 'y', 'ubico', 'ubicado', 'ubicada', 'escribo', 'municipio',
+  'encuentro', 'espera', 'desde', 'si', 'sii', 'sip', 'sipi', 'ok', 'okay',
+  'vale', 'listo', 'correcto', 'bueno', 'bn', 'perfecto', 'confirmo', 'te',
+  'cundinamarca', 'tolima', 'bogota', 'ibague', 'funza', 'mosquera', 'madrid', 'siberia'
 ]);
+const ROLE_SIGNAL_REGEX = /\b(aux|auxiliar|cargue|descargue|bodega|operari|operativo|mensajer|conductor|coordinador|coordinadora|logistic|logistica|logistico|operaciones|ruta|cargo|vacante|puesto|rol)\b/i;
+const LOCATION_ALIASES = [
+  { value: 'Bogota', patterns: [/\bbogota\b/i, /\bfunza\b/i, /\bmosquera\b/i, /\bmadrid\b/i, /\bsiberia\b/i, /\bsuba\b/i, /\bengativa\b/i, /\bcalle 80\b/i, /\bvillas? de granada\b/i, /\bel rosal\b/i] },
+  { value: 'Ibague', patterns: [/\bibague\b/i] }
+];
 
 export function normalizeResolverText(text = '') {
   return String(text || '')
@@ -51,7 +59,10 @@ export function detectCityFromText(text = '', cityNames = []) {
     }
   }
 
-  return bestMatch?.value || null;
+  if (bestMatch?.value) return bestMatch.value;
+
+  const alias = LOCATION_ALIASES.find((entry) => entry.patterns.some((pattern) => pattern.test(text)));
+  return alias?.value || null;
 }
 
 function cleanRoleTokens(tokens = [], cityTokens = new Set()) {
@@ -63,11 +74,29 @@ function cleanRoleTokens(tokens = [], cityTokens = new Set()) {
   ));
 }
 
+function splitMeaningfulSegments(text = '') {
+  return String(text || '')
+    .split(/[\n,;]+/)
+    .map((segment) => normalizeResolverText(segment))
+    .filter(Boolean);
+}
+
+function findSegmentWithRoleSignal(segments = []) {
+  return segments.find((segment) => ROLE_SIGNAL_REGEX.test(segment)) || null;
+}
+
 export function detectRoleHintFromText(text = '', options = {}) {
   const normalized = normalizeResolverText(text);
   if (!normalized) return null;
 
   const cityTokens = new Set(tokenize(options.city || ''));
+  const segments = splitMeaningfulSegments(text);
+  const preferredSegment = findSegmentWithRoleSignal(segments);
+  if (preferredSegment) {
+    const preferredTokens = cleanRoleTokens(tokenize(preferredSegment), cityTokens);
+    if (preferredTokens.length) return preferredTokens.join(' ');
+  }
+
   const explicitPatterns = [
     /\b(?:vacante|cargo|rol|puesto)\s+(?:de|para)?\s*([a-z0-9 ]{3,80})/i,
     /\b(?:quiero aplicar(?: a)?|quiero postularme(?: a)?|me interesa(?: la)?|estoy interesad[oa] en(?: la)?|informacion(?: de)?(?: la)?|para)\s+(?:vacante|cargo|rol|puesto)?\s*(?:de|para)?\s*([a-z0-9 ]{3,80})/i
@@ -80,8 +109,12 @@ export function detectRoleHintFromText(text = '', options = {}) {
     if (roleTokens.length) return roleTokens.join(' ');
   }
 
-  const roleTokens = cleanRoleTokens(tokenize(normalized), cityTokens);
-  return roleTokens.length ? roleTokens.join(' ') : null;
+  if (ROLE_SIGNAL_REGEX.test(normalized)) {
+    const roleTokens = cleanRoleTokens(tokenize(normalized), cityTokens);
+    return roleTokens.length ? roleTokens.join(' ') : null;
+  }
+
+  return null;
 }
 
 function similarityScore(input = '', candidate = '') {
@@ -194,6 +227,12 @@ function pickBestVacancyMatch(vacancies = [], context = {}) {
   };
 }
 
+function isStrongUniqueRoleMatch(match, threshold = 4.5) {
+  if (!match?.best) return false;
+  if (match.best.score < threshold) return false;
+  return !match.runnerUp || match.margin >= 0.75;
+}
+
 export async function resolveVacancyFromText(prisma, text, options = {}) {
   const normalizedText = normalizeResolverText(text);
   if (!normalizedText) {
@@ -222,9 +261,23 @@ export async function resolveVacancyFromText(prisma, text, options = {}) {
     ? inactiveVacancies.filter((vacancy) => normalizeResolverText(canonicalVacancyCity(vacancy)) === normalizeResolverText(city))
     : inactiveVacancies;
 
-  const threshold = roleHint ? 4.5 : 6;
+  const roleTokenCount = roleHint ? cleanRoleTokens(tokenize(roleHint)).length : 0;
+  const threshold = roleHint ? (roleTokenCount >= 2 ? 4 : 4.5) : 6;
 
   if (city && !matchingCityVacancies.length) {
+    const crossCityActiveMatch = roleHint
+      ? pickBestVacancyMatch(activeVacancies, { text, city: null, roleHint })
+      : null;
+    if (isStrongUniqueRoleMatch(crossCityActiveMatch, threshold)) {
+      return {
+        resolved: true,
+        vacancy: crossCityActiveMatch.best.vacancy,
+        city: canonicalVacancyCity(crossCityActiveMatch.best.vacancy),
+        roleHint,
+        reason: 'matched_active_vacancy_by_role_outside_city'
+      };
+    }
+
     const inactiveMatch = pickBestVacancyMatch(inactiveCityVacancies, { text, city, roleHint });
     if (inactiveMatch?.best && inactiveMatch.best.score >= threshold) {
       return {
@@ -253,7 +306,7 @@ export async function resolveVacancyFromText(prisma, text, options = {}) {
   }
 
   const { best, runnerUp, margin } = pickBestVacancyMatch(matchingCityVacancies, { text, city, roleHint });
-  const hasUniqueCityMatch = Boolean(city && matchingCityVacancies.length === 1 && hasInterestSignal(text));
+  const hasUniqueCityMatch = Boolean(city && matchingCityVacancies.length === 1);
   const effectiveThreshold = roleHint ? threshold : hasUniqueCityMatch ? 4 : 6;
 
   if (!best || best.score < effectiveThreshold) {

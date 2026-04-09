@@ -177,6 +177,13 @@ test('no toma frases de cargo como fullName', () => {
   assert.equal(Object.hasOwn(decisions.persistedData, 'fullName'), false);
 });
 
+test('no toma frases de rol o requisitos como fullName', () => {
+  const roleParsed = parseNaturalData('Coordinador de operaciones');
+  const requirementParsed = parseNaturalData('Cumplo requisitos');
+  assert.equal(normalizeCandidateFields(roleParsed).fullName, undefined);
+  assert.equal(normalizeCandidateFields(requirementParsed).fullName, undefined);
+});
+
 test('no toma restricciones medicas como fullName', () => {
   const parsed = parseNaturalData('Sin restriccion medica');
   const normalized = normalizeCandidateFields(parsed);
@@ -210,6 +217,19 @@ test('detecta genero femenino explicito en el mensaje', () => {
   const parsed = parseNaturalData('Soy mujer y estoy interesada en la vacante');
   const normalized = normalizeCandidateFields(parsed);
   assert.equal(normalized.gender, 'FEMALE');
+});
+
+test('detecta genero femenino por lenguaje y no lo persiste como nombre', () => {
+  const parsed = parseNaturalData('Quedo atenta');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.gender, 'FEMALE');
+  assert.equal(normalized.fullName, undefined);
+});
+
+test('prioriza moto cuando el candidato reporta bicicleta y moto', () => {
+  const parsed = parseNaturalData('Medio de transporte bicicleta y moto');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.transportMode, 'Moto');
 });
 
 test('usa localidad como residencia principal para vacantes de Bogota', () => {

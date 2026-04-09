@@ -44,6 +44,7 @@ test('legacy VALIDANDO se normaliza a REGISTRADO y APROBADO se mantiene visible'
   assert.equal(normalizeCandidateStatusForUI('VALIDANDO'), 'REGISTRADO');
   assert.equal(normalizeCandidateStatusForUI('APROBADO'), 'APROBADO');
   assert.equal(normalizeCandidateStatusForUI('CONTACTADO'), 'CONTACTADO');
+  assert.equal(normalizeCandidateStatusForUI('CONTRATADO'), 'CONTRATADO');
 });
 
 test('deriveCandidateStatusForUI refleja reglas operativas reales', () => {
@@ -51,6 +52,7 @@ test('deriveCandidateStatusForUI refleja reglas operativas reales', () => {
   assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'REGISTRADO', cvData: null }), 'NUEVO');
   assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'APROBADO', cvData: null }), 'APROBADO');
   assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'CONTACTADO', cvData: null }), 'CONTACTADO');
+  assert.equal(deriveCandidateStatusForUI({ ...baseCandidate, status: 'CONTRATADO', cvData: null }), 'CONTRATADO');
 });
 
 test('scope registered incluye estados legacy cuando cumplen criterio operativo', () => {
@@ -69,11 +71,13 @@ test('scope registered incluye estados legacy cuando cumplen criterio operativo'
   );
   assert.deepEqual(filterCandidatesByScope(candidates, 'new').map((c) => c.id), ['new-incomplete']);
   assert.deepEqual(filterCandidatesByScope(candidates, 'contacted').map((c) => c.id), ['contacted']);
+  assert.deepEqual(filterCandidatesByScope([...candidates, { ...baseCandidate, id: 'contracted', status: 'CONTRATADO' }], 'contracted').map((c) => c.id), ['contracted']);
   assert.deepEqual(filterCandidatesByScope(candidates, 'rejected').map((c) => c.id), ['rejected']);
 });
 
 test('nombre de archivo de exportación usa scopes operativos', () => {
   assert.match(exportFilenameByScope('contacted'), /^candidatos_contactados_\d{4}-\d{2}-\d{2}\.xlsx$/);
+  assert.match(exportFilenameByScope('contracted'), /^candidatos_contratados_\d{4}-\d{2}-\d{2}\.xlsx$/);
   assert.match(exportFilenameByScope('missing_cv_complete'), /^candidatos_pendientes_hv_\d{4}-\d{2}-\d{2}\.xlsx$/);
   assert.match(exportFilenameByScope('invalid-scope'), /^candidatos_todos_\d{4}-\d{2}-\d{2}\.xlsx$/);
 });
@@ -130,7 +134,7 @@ test('scope missing_cv_complete filtra candidatos completos sin HV', () => {
 
 test('ruta /admin/export acepta missing_cv_complete como scope válido', () => {
   const adminRouteSource = fs.readFileSync('src/routes/admin.js', 'utf8');
-  assert.match(adminRouteSource, /const EXPORT_SCOPES = new Set\(\['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'rejected', 'all'\]\)/);
+  assert.match(adminRouteSource, /const EXPORT_SCOPES = new Set\(\['registered', 'missing_cv_complete', 'approved', 'new', 'contacted', 'contracted', 'rejected', 'all'\]\)/);
   assert.match(adminRouteSource, /const scope = normalizeString\(req\.query\.scope\) \|\| 'all';/);
   assert.match(adminRouteSource, /if \(!EXPORT_SCOPES\.has\(scope\)\)/);
   assert.match(adminRouteSource, /res\.status\(400\)\.send\(/);
