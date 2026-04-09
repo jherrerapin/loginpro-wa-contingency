@@ -580,6 +580,10 @@
     return candidate.lastMessageAt || candidate.lastInboundAt || candidate.lastOutboundAt || candidate.createdAt || null;
   }
 
+  function candidateRegistrationAt(candidate) {
+    return candidate?.createdAt || null;
+  }
+
   function candidateLastMessageLabel(candidate) {
     if (!candidate?.createdAt) return 'Fecha de registro: sin dato';
     return 'Fecha de registro: ' + formatDateTimeCO(candidate.createdAt);
@@ -746,7 +750,7 @@
     <a href="/admin/outreach/approved" class="export-btn">↗ Mensajes a aprobados</a>
   </div>
 
-  <table class="legacy-table" style="background:var(--surface);box-shadow:var(--shadow-sm);border-radius:0 0 8px 8px;border:1px solid var(--border);overflow:hidden;">
+  <table id="legacy-candidates-table" class="legacy-table" style="background:var(--surface);box-shadow:var(--shadow-sm);border-radius:0 0 8px 8px;border:1px solid var(--border);overflow:hidden;">
     <thead>
       <tr>
         <th>Actividad reciente</th><th>Nombre</th><th>Teléfono</th><th>Documento</th>
@@ -759,7 +763,7 @@
         <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', APROBADO:'badge-aprobado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado', CONTRATADO:'badge-contratado' }; %>
         <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', APROBADO:'Aprobado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado', CONTRATADO:'Contratado' }; %>
         <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
-          <td><%= formatDateTimeCO(candidateLastActivityAt(c)) %></td>
+          <td><%= formatDateTimeCO(role === 'dev' ? candidateLastActivityAt(c) : candidateRegistrationAt(c)) %></td>
           <td style="font-weight:600;">
             <%= c.fullName || '—' %>
             <% if (isFemaleCandidate(c)) { %>
@@ -1612,6 +1616,15 @@
 
 </div>
 <% } %>
+
+<script>
+  (function () {
+    const role = <%- JSON.stringify(role || '') %>;
+    if (role === 'dev') return;
+    const firstHeader = document.querySelector('#legacy-candidates-table thead th');
+    if (firstHeader) firstHeader.textContent = 'Fecha de registro';
+  })();
+</script>
 
 </body>
 </html>
