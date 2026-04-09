@@ -83,6 +83,7 @@ test('detail entrevista recruiter muestra solo asistio, no asistio y reagendo', 
   assert.match(html, /No asisti/);
   assert.match(html, /Reagend/);
   assert.match(html, /Nueva fecha y hora de entrevista/);
+  assert.match(html, /booking-actions[\s\S]*Reagend[\s\S]*booking-reschedule-panel/);
   assert.doesNotMatch(html, />\s*Cancel[oó]\s*</);
   assert.doesNotMatch(html, /No contesta/);
   assert.doesNotMatch(html, /Eliminar agendamiento/);

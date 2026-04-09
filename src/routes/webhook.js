@@ -602,7 +602,7 @@ async function resolveInterviewSlotContext(prisma, candidate, vacancy, inboundTe
   const wantsAlternative = isSchedulingRescheduleIntent(inboundText);
   const activeBooking = await loadActiveInterviewBooking(prisma, candidate.id);
 
-  if (candidate.currentStep === ConversationStep.SCHEDULED && activeBooking && !wantsAlternative) {
+  if (activeBooking && !wantsAlternative) {
     const scheduledDate = new Date(activeBooking.scheduledAt);
     return {
       slot: { id: activeBooking.slotId },
@@ -632,7 +632,7 @@ async function resolveInterviewSlotContext(prisma, candidate, vacancy, inboundTe
     return hydrateOfferedSlot(prisma, vacancy.id, lastInboundAt, pendingOffer);
   }
 
-  if ((candidate.currentStep === ConversationStep.SCHEDULED || candidate.currentStep === ConversationStep.SCHEDULING) && wantsAlternative && activeBooking) {
+  if (wantsAlternative && activeBooking) {
     const alternative = await getNextAvailableSlotAfter(prisma, vacancy.id, lastInboundAt, activeBooking);
     if (!alternative?.slot) return alternative;
     return {
@@ -1035,8 +1035,16 @@ export async function saveInboundMessage(prisma, candidateId, message, body, typ
       skipDuplicates: true
     });
   } catch (error) {
-    const messageTypeMismatch = /invalid input value for enum "MessageType"/i.test(String(error?.message || ''));
-    if (!messageTypeMismatch || type === MessageType.UNKNOWN) throw error;
+    const errorText = String(error?.message || error?.stack || error || '');
+    const messageTypeMismatch = (
+      type !== MessageType.UNKNOWN
+      && (
+        type === MessageType.IMAGE
+        || /invalid input value for enum "MessageType"/i.test(errorText)
+        || /invalid input value for enum/i.test(errorText)
+      )
+    );
+    if (!messageTypeMismatch) throw error;
 
     console.warn('[INBOUND_MESSAGE_TYPE_FALLBACK]', JSON.stringify({
       phone: phone || null,
@@ -1412,9 +1420,13 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     return;
   }
 
+  const activeInterviewBooking = currentVacancy && isSchedulingEligibleCandidate(candidate, currentVacancy)
+    ? await loadActiveInterviewBooking(prisma, candidate.id)
+    : null;
+
   if (
     currentVacancy
-    && (candidate.currentStep === ConversationStep.SCHEDULING || candidate.currentStep === ConversationStep.SCHEDULED)
+    && ((candidate.currentStep === ConversationStep.SCHEDULING || candidate.currentStep === ConversationStep.SCHEDULED) || Boolean(activeInterviewBooking?.id))
     && isSchedulingEligibleCandidate(candidate, currentVacancy)
     && (
       isSchedulingConfirmationIntent(cleanText)
@@ -1423,7 +1435,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
       || isDocumentValidationQuestion(cleanText)
     )
   ) {
-    const activeBooking = await loadActiveInterviewBooking(prisma, candidate.id);
+    const activeBooking = activeInterviewBooking;
     const nextSlot = await resolveInterviewSlotContext(prisma, candidate, currentVacancy, cleanText);
 
     if (isSchedulingRescheduleIntent(cleanText)) {
@@ -1470,7 +1482,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     }
 
     if (isSchedulingConfirmationIntent(cleanText)) {
-      if (candidate.currentStep === ConversationStep.SCHEDULED && activeBooking?.id) {
+      if (activeBooking?.id) {
         await updateInterviewBookingResponse(prisma, activeBooking.id, {
           status: 'CONFIRMED',
           reminderResponse: 'CONFIRMED',
@@ -1608,8 +1620,8 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     return replyWithVacancyContext(candidate, currentVacancy);
   }
 
-  if ((candidate.currentStep === ConversationStep.SCHEDULING || candidate.currentStep === ConversationStep.SCHEDULED) && currentVacancy && isSchedulingEligibleCandidate(candidate, currentVacancy)) {
-    const activeBooking = await loadActiveInterviewBooking(prisma, candidate.id);
+  if (((candidate.currentStep === ConversationStep.SCHEDULING || candidate.currentStep === ConversationStep.SCHEDULED) || Boolean(activeInterviewBooking?.id)) && currentVacancy && isSchedulingEligibleCandidate(candidate, currentVacancy)) {
+    const activeBooking = activeInterviewBooking;
     const nextSlot = await resolveInterviewSlotContext(prisma, candidate, currentVacancy, cleanText);
 
     if (isSchedulingRescheduleIntent(cleanText)) {
@@ -1656,7 +1668,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     }
 
     if (isSchedulingConfirmationIntent(cleanText)) {
-      if (candidate.currentStep === ConversationStep.SCHEDULED && activeBooking?.id) {
+      if (activeBooking?.id) {
         await updateInterviewBookingResponse(prisma, activeBooking.id, {
           status: 'CONFIRMED',
           reminderResponse: 'CONFIRMED',
@@ -2100,6 +2112,7 @@ export function webhookRouter(prisma) {
 
         if (message.type === 'text') {
           const body = message.text?.body || '';
+          const cleanText = normalizeText(body);
           const inbound = await saveInboundMessage(prisma, candidate.id, message, body, MessageType.TEXT, from);
           if (!inbound.isNew) continue;
 
