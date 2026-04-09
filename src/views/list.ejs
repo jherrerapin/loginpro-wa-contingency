@@ -186,6 +186,7 @@
     .badge-validando  { background: var(--blue-light);   color: var(--blue); }
     .badge-aprobado   { background: #ccfbf1;             color: #0f766e; }
     .badge-contactado { background: var(--purple-light); color: var(--purple); }
+    .badge-contratado { background: #dbeafe;             color: #1d4ed8; }
     .badge-rechazado  { background: var(--red-light);    color: var(--red); }
     .badge-human-review { background: #fef3c7; color: #92400e; }
     .badge-female { background: #fce7f3; color: #be185d; border: 1px solid #f9a8d4; }
@@ -385,6 +386,7 @@
   </a>
   <a href="/admin">Panel</a>
   <a href="/admin/vacancies">Vacantes</a>
+  <a href="/admin/users">Usuarios</a>
   <% if (role === 'dev') { %>
     <a href="/admin/monitor">Monitor</a>
   <% } %>
@@ -481,6 +483,15 @@
     return 'Último mensaje ' + direction + ': ' + formatDateTimeCO(timestamp);
   }
 
+  function candidateLastActivityAt(candidate) {
+    return candidate.lastMessageAt || candidate.lastInboundAt || candidate.lastOutboundAt || candidate.createdAt || null;
+  }
+
+  function candidateLastMessageLabel(candidate) {
+    if (!candidate?.createdAt) return 'Fecha de registro: sin dato';
+    return 'Fecha de registro: ' + formatDateTimeCO(candidate.createdAt);
+  }
+
   function isFemaleCandidate(candidate) {
     return candidate?.gender === 'FEMALE' || candidate?.isFemaleCandidate;
   }
@@ -575,6 +586,7 @@
       ...(role === 'admin' ? [{ scope: 'missing_cv_complete', label: 'Pendientes HV' }] : []),
       ...(role === 'dev' ? [{ scope: 'new', label: 'Nuevos' }] : []),
       { scope: 'contacted',  label: 'Contactados' },
+      { scope: 'contracted', label: 'Contratados' },
       { scope: 'rejected',   label: 'Rechazados' },
       { scope: 'all',        label: 'Todos' }
     ];
@@ -637,23 +649,24 @@
     <a href="/admin/export?scope=contacted" class="export-btn">↓ Contactados</a>
     <a href="/admin/export?scope=rejected" class="export-btn">↓ Rechazados</a>
     <a href="/admin/export?scope=all" class="export-btn">↓ Todos</a>
+    <a href="/admin/export?scope=contracted" class="export-btn">Contratados</a>
     <a href="/admin/outreach/approved" class="export-btn">↗ Mensajes a aprobados</a>
   </div>
 
   <table class="legacy-table" style="background:var(--surface);box-shadow:var(--shadow-sm);border-radius:0 0 8px 8px;border:1px solid var(--border);overflow:hidden;">
     <thead>
       <tr>
-        <th>Fecha registro</th><th>Nombre</th><th>Teléfono</th><th>Documento</th>
+        <th>Actividad reciente</th><th>Nombre</th><th>Teléfono</th><th>Documento</th>
         <th>Edad</th><th>Barrio / localidad</th><th>Restr. médicas</th><th>Transporte</th><th>Estado</th><th>Rechazo</th><th></th>
       </tr>
     </thead>
     <tbody>
       <% for (const c of candidates) { %>
         <% const uiStatus = normalizeCandidateStatusForUI(c.status); %>
-        <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', APROBADO:'badge-aprobado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado' }; %>
-        <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', APROBADO:'Aprobado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado' }; %>
+        <% const statusBadge = { NUEVO:'badge-nuevo', REGISTRADO:'badge-registrado', APROBADO:'badge-aprobado', RECHAZADO:'badge-rechazado', CONTACTADO:'badge-contactado', CONTRATADO:'badge-contratado' }; %>
+        <% const statusLabel = { NUEVO:'Nuevo', REGISTRADO:'Registrado', APROBADO:'Aprobado', RECHAZADO:'Rechazado', CONTACTADO:'Contactado', CONTRATADO:'Contratado' }; %>
         <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
-          <td><%= formatDateTimeCO(c.createdAt) %></td>
+          <td><%= formatDateTimeCO(candidateLastActivityAt(c)) %></td>
           <td style="font-weight:600;">
             <%= c.fullName || '—' %>
             <% if (isFemaleCandidate(c)) { %>
@@ -734,6 +747,7 @@
     VALIDANDO:  { cls: 'badge-validando',  label: 'Validando' },
     APROBADO:   { cls: 'badge-aprobado',   label: 'Aprobado' },
     CONTACTADO: { cls: 'badge-contactado', label: 'Contactado' },
+    CONTRATADO: { cls: 'badge-contratado', label: 'Contratado' },
     RECHAZADO:  { cls: 'badge-rechazado',  label: 'Rechazado' }
   };
 
@@ -1277,7 +1291,7 @@
           <% if (v.approvedCandidates.length > 0) { %>
           <div class="section">
             <div class="section-header">
-              <span class="section-title">Aprobados</span>
+              <span class="section-title">Aprobados / Contratados</span>
               <span class="section-count"><%= filteredApprovedCandidates.length %></span>
             </div>
             <div class="candidates-list">
@@ -1344,11 +1358,43 @@
           <a href="/admin/export?scope=missing_cv_complete" class="export-btn">↓ Descargar pendientes HV</a>
           <a href="/admin/export?scope=approved" class="export-btn">↓ Descargar aprobados</a>
           <a href="/admin/export?scope=all" class="export-btn">↓ Descargar todos</a>
+          <a href="/admin/export?scope=contracted" class="export-btn">Contratados</a>
           <a href="/admin/outreach/approved" class="export-btn">↗ Mensajes a aprobados</a>
           <a href="/admin/vacancies" class="export-btn" style="margin-left:auto;">⚙️ Gestionar vacantes</a>
         </div>
       </div>
     <% } %>
+  </div>
+  <% } %>
+
+  <% if (role === 'dev' && manualReviewCandidates && manualReviewCandidates.length > 0) { %>
+  <div class="legacy-section" style="margin-top:24px;">
+    <div class="legacy-header">
+      <h3>Atencion manual pendiente <span style="font-weight:400;color:var(--text-muted);font-size:13px;">(<%= manualReviewCandidates.length %>)</span></h3>
+      <span style="font-size:12px;color:var(--text-muted);">Chats que requieren seguimiento humano</span>
+    </div>
+    <table class="legacy-table">
+      <thead><tr><th>Actividad</th><th>Nombre</th><th>Motivo</th><th>Telefono</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+        <% for (const c of manualReviewCandidates.slice(0, 12)) { %>
+          <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
+          <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, APROBADO:{cls:'badge-aprobado',label:'Aprobado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'}, CONTRATADO:{cls:'badge-contratado',label:'Contratado'} }; %>
+          <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
+            <td style="font-size:12px;color:var(--text-muted);"><%= formatDateTimeCO(candidateLastActivityAt(c)) %></td>
+            <td style="font-weight:600;">
+              <%= c.fullName || '—' %>
+              <% if (role === 'dev') { %>
+                <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
+              <% } %>
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);"><%= c.botPauseReason || 'Revision manual solicitada' %></td>
+            <td><a href="<%= candidateWhatsappHref(c) %>" style="color:#25d366;font-weight:600;"><%= formatCandidatePhone(c.phone) %></a></td>
+            <td><span class="badge <%= (stBadge[uiSt]||{cls:'badge-nuevo'}).cls %>"><%= (stBadge[uiSt]||{label:uiSt}).label %></span></td>
+            <td><a href="<%= candidateDetailHref(c) %>" class="link-detail">Ver chat -></a></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
   </div>
   <% } %>
 
@@ -1363,7 +1409,7 @@
       <tbody>
         <% for (const c of legacyCandidates.slice(0, 10)) { %>
           <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
-          <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, APROBADO:{cls:'badge-aprobado',label:'Aprobado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'} }; %>
+          <% const stBadge = { NUEVO:{cls:'badge-nuevo',label:'Nuevo'}, REGISTRADO:{cls:'badge-registrado',label:'Registrado'}, APROBADO:{cls:'badge-aprobado',label:'Aprobado'}, RECHAZADO:{cls:'badge-rechazado',label:'Rechazado'}, CONTACTADO:{cls:'badge-contactado',label:'Contactado'}, CONTRATADO:{cls:'badge-contratado',label:'Contratado'} }; %>
           <tr class="<%= isFemaleCandidate(c) ? 'legacy-row-female' : '' %>">
             <td style="font-weight:600;">
               <%= c.fullName || '—' %>

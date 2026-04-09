@@ -23,11 +23,52 @@ const sessionCookieName = process.env.SESSION_COOKIE_NAME || 'loginpro.sid';
 const sessionSecret = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
 
 if (!process.env.SESSION_SECRET) {
-  console.warn('SESSION_SECRET no está configurada. Usa un valor robusto en producción.');
+  console.warn('SESSION_SECRET no esta configurada. Usa un valor robusto en produccion.');
 }
 
 if (isProduction) {
   app.set('trust proxy', 1);
+}
+
+function normalizeString(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function buildLoginViewModel(overrides = {}) {
+  return {
+    error: null,
+    username: '',
+    success: null,
+    ...overrides
+  };
+}
+
+function mapDbRoleToSessionRole(role) {
+  return role === 'DEV' ? 'dev' : 'admin';
+}
+
+function buildUserSessionPayload(user) {
+  return {
+    userId: user.id,
+    userRole: mapDbRoleToSessionRole(user.role),
+    username: user.username,
+    userAccessScope: user.accessScope || 'ALL',
+    userAccessCity: user.scopeCity || null,
+    userAccessVacancyId: user.scopeVacancyId || null,
+    userSource: 'db'
+  };
+}
+
+function applySessionPayload(req, payload) {
+  req.session.userId = payload.userId || null;
+  req.session.userRole = payload.userRole;
+  req.session.username = payload.username;
+  req.session.userAccessScope = payload.userAccessScope || 'ALL';
+  req.session.userAccessCity = payload.userAccessCity || null;
+  req.session.userAccessVacancyId = payload.userAccessVacancyId || null;
+  req.session.userSource = payload.userSource || 'env';
 }
 
 app.set('view engine', 'ejs');
@@ -62,6 +103,12 @@ app.use(session({
 
 app.use((req, _res, next) => {
   req.userRole = req.session?.userRole || null;
+  req.userId = req.session?.userId || null;
+  req.username = req.session?.username || null;
+  req.userAccessScope = req.session?.userAccessScope || 'ALL';
+  req.userAccessCity = req.session?.userAccessCity || null;
+  req.userAccessVacancyId = req.session?.userAccessVacancyId || null;
+  req.userSource = req.session?.userSource || null;
   next();
 });
 
@@ -72,7 +119,10 @@ app.get('/health', async (_req, res) => {
 
 app.get('/login', (req, res) => {
   if (req.session?.userRole) return res.redirect('/admin');
-  res.render('login', { error: null, username: '' });
+  res.render('login', buildLoginViewModel({
+    success: normalizeString(req.query.success),
+    username: normalizeString(req.query.username) || ''
+  }));
 });
 
 async function verifyCredential(plain, envValue) {
@@ -83,22 +133,134 @@ async function verifyCredential(plain, envValue) {
   return plain === envValue;
 }
 
+async function authenticateDatabaseUser(username, password) {
+  if (!normalizeString(username) || !password) return null;
+  const user = await prisma.appUser.findUnique({
+    where: { username },
+    select: {
+      id: true,
+      username: true,
+      passwordHash: true,
+      role: true,
+      accessScope: true,
+      scopeCity: true,
+      scopeVacancyId: true,
+      isActive: true
+    }
+  });
+  if (!user || !user.isActive) return null;
+  const matches = await bcrypt.compare(password, user.passwordHash);
+  if (!matches) return null;
+  return buildUserSessionPayload(user);
+}
+
 app.post('/login', async (req, res) => {
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
-  let role = null;
-  if (username === process.env.DEV_USER && await verifyCredential(password, process.env.DEV_PASS)) role = 'dev';
-  else if (username === process.env.ADMIN_USER && await verifyCredential(password, process.env.ADMIN_PASS)) role = 'admin';
-  if (!role) return res.status(401).render('login', { error: 'Usuario o contraseña inválidos.', username });
+  let sessionPayload = await authenticateDatabaseUser(username, password);
+
+  if (!sessionPayload) {
+    let role = null;
+    if (username === process.env.DEV_USER && await verifyCredential(password, process.env.DEV_PASS)) role = 'dev';
+    else if (username === process.env.ADMIN_USER && await verifyCredential(password, process.env.ADMIN_PASS)) role = 'admin';
+
+    if (role) {
+      sessionPayload = {
+        userId: null,
+        userRole: role,
+        username,
+        userAccessScope: 'ALL',
+        userAccessCity: null,
+        userAccessVacancyId: null,
+        userSource: 'env'
+      };
+    }
+  }
+
+  if (!sessionPayload) {
+    return res.status(401).render('login', buildLoginViewModel({
+      error: 'Usuario o contrasena invalidos.',
+      username
+    }));
+  }
+
   req.session.regenerate((regenError) => {
-    if (regenError) return res.status(500).render('login', { error: 'No fue posible iniciar sesión. Intenta nuevamente.', username });
-    req.session.userRole = role;
-    req.session.username = username;
+    if (regenError) {
+      return res.status(500).render('login', buildLoginViewModel({
+        error: 'No fue posible iniciar sesion. Intenta nuevamente.',
+        username
+      }));
+    }
+    applySessionPayload(req, sessionPayload);
     req.session.save((saveError) => {
-      if (saveError) return res.status(500).render('login', { error: 'No fue posible iniciar sesión. Intenta nuevamente.', username });
+      if (saveError) {
+        return res.status(500).render('login', buildLoginViewModel({
+          error: 'No fue posible iniciar sesion. Intenta nuevamente.',
+          username
+        }));
+      }
       return res.redirect('/admin');
     });
   });
+});
+
+app.get('/recover', (req, res) => {
+  if (req.session?.userRole) return res.redirect('/admin');
+  res.render('recover', {
+    error: null,
+    username: normalizeString(req.query.username) || '',
+    success: normalizeString(req.query.success)
+  });
+});
+
+app.post('/recover', async (req, res) => {
+  const username = normalizeString(req.body.username) || '';
+  const recoveryCode = normalizeString(req.body.recoveryCode) || '';
+  const newPassword = typeof req.body.newPassword === 'string' ? req.body.newPassword : '';
+
+  if (!username || !recoveryCode || newPassword.length < 6) {
+    return res.status(400).render('recover', {
+      error: 'Debes ingresar usuario, codigo de recuperacion y una contrasena de al menos 6 caracteres.',
+      username,
+      success: null
+    });
+  }
+
+  const user = await prisma.appUser.findUnique({
+    where: { username },
+    select: { id: true, isActive: true, recoveryCodeHash: true }
+  });
+
+  if (!user || !user.isActive || !user.recoveryCodeHash) {
+    return res.status(400).render('recover', {
+      error: 'No fue posible validar ese usuario para recuperacion. Si es un usuario antiguo por variables de entorno, recupera el acceso desde dev.',
+      username,
+      success: null
+    });
+  }
+
+  const matchesRecoveryCode = await bcrypt.compare(recoveryCode, user.recoveryCodeHash);
+  if (!matchesRecoveryCode) {
+    return res.status(401).render('recover', {
+      error: 'El codigo de recuperacion no es valido.',
+      username,
+      success: null
+    });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.appUser.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      lastPasswordResetAt: new Date()
+    }
+  });
+
+  const params = new URLSearchParams();
+  params.set('success', 'Contrasena actualizada. Ya puedes iniciar sesion.');
+  params.set('username', username);
+  return res.redirect(`/login?${params.toString()}`);
 });
 
 const destroySession = (req, res) => {
@@ -128,8 +290,11 @@ app.listen(port, () => console.log(`Server listening on ${port}`));
 
 const reminderIntervalMs = 60_000;
 setInterval(async () => {
-  try { await runReminderDispatcher(prisma); }
-  catch (error) { console.error('[REMINDER_DISPATCHER_ERROR]', error); }
+  try {
+    await runReminderDispatcher(prisma);
+  } catch (error) {
+    console.error('[REMINDER_DISPATCHER_ERROR]', error);
+  }
 }, reminderIntervalMs);
 
 const autoCvMigrationIntervalMs = Number.parseInt(process.env.AUTO_CV_MIGRATION_INTERVAL_MS || String(5 * 60_000), 10) || (5 * 60_000);

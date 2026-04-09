@@ -29,6 +29,32 @@ const MALE_GENDER_PATTERNS = [
   /\b(?:candidato|senor|señor)\b/i
 ];
 
+const EXTRA_LOCATION_STOPWORDS = /\b(si|sii|sip|ok|okay|vale|listo|correcto|correcta|bueno|buena|bn|interesado|interesada|interesa|cumplo|requisito|requisitos|coordinador|coordinadora|operaciones|operacion|operaci(?:o|Ã³)n|logistica|logistico|ruta|perfil|postulacion)\b/i;
+const EXTRA_FEMALE_GENDER_PATTERNS = [
+  /\b(?:estoy|me encuentro)\s+interesada\b/i,
+  /\bquedo\s+atenta\b/i
+];
+const EXTRA_MALE_GENDER_PATTERNS = [
+  /\b(?:estoy|me encuentro)\s+interesado\b/i,
+  /\bquedo\s+atento\b/i
+];
+const NO_MEDICAL_RESTRICTION_PATTERNS = [
+  /^(?:sin\s+restriccion(?:es)?(?:\s+medicas?)?|ninguna\s+restriccion(?:\s+medica)?|ninguna)$/i,
+  /^(?:no\s+tengo|no\s+cuento\s+con)\s+(?:ninguna\s+)?(?:restriccion(?:es)?(?:\s+medicas?)?|limitacion(?:es)?(?:\s+medicas?)?)$/i,
+  /^restriccion(?:es)?(?:\s+medicas?)?\s*:?\s*(?:ninguna|no\s+tengo|sin\s+restricciones?)$/i,
+  /^no,\s*ninguna$/i,
+  /^estoy\s+sano(?:a)?$/i,
+  /^(?:sano|sana)$/i
+];
+const IMPLICIT_NO_MEDICAL_RESTRICTION_PATTERNS = [
+  /^(?:no|ninguna|ninguno)$/i,
+  /^no\s+tengo\s+ninguna$/i,
+  /^no\s+cuento\s+con\s+ninguna$/i,
+  /^no\s+tengo\s+de\s+esas$/i
+];
+const RIDE_HAIL_VARIANTS = ['uber', 'indriver', 'in driver', 'taxi'];
+const TRANSPORT_PRIORITY = ['Moto', 'Carro', 'Bicicleta', 'Bus', 'Independiente'];
+
 function looksLikeJobRoleChunk(value = '') {
   const normalized = normalizeLooseText(value);
   if (!normalized) return false;
@@ -42,6 +68,25 @@ function normalizeLooseText(value = '') {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+export function looksLikeNoMedicalRestrictionsText(text = '', options = {}) {
+  const normalized = normalizeLooseText(text);
+  if (!normalized) return false;
+
+  if (NO_MEDICAL_RESTRICTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  if (/\b(?:sin\s+restriccion(?:es)?(?:\s+medicas?)?|no\s+tengo\s+(?:ninguna\s+)?restriccion(?:es)?(?:\s+medicas?)?|no\s+cuento\s+con\s+(?:ninguna\s+)?restriccion(?:es)?(?:\s+medicas?)?|ninguna\s+restriccion(?:\s+medica)?|restriccion(?:es)?(?:\s+medicas?)?\s*:?\s*(?:ninguna|no\s+tengo|sin\s+restricciones?)|estoy\s+sano(?:a)?|(?:^|\s)(?:sano|sana)(?:\s|$))\b/.test(normalized)) {
+    return true;
+  }
+
+  if (options.allowImplicit && IMPLICIT_NO_MEDICAL_RESTRICTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  return false;
 }
 
 function resolveCityValue(vacancyOrCity = null) {
@@ -146,12 +191,21 @@ function detectTransportKeyword(text = '') {
   if (/\b(?:sin|no\s+tengo|no\s+tiene|ninguno|ninguna)\s+(?:medio\s+de\s+transporte|transporte|vehiculo|moto|motocicleta|bicicleta|bici|cicla|carro|automovil|bus|buseta)\b/.test(normalized)) {
     return 'Sin medio de transporte';
   }
-  if (BIKE_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) return 'Bicicleta';
-  if (MOTO_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) return 'Moto';
-  if (CAR_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) return 'Carro';
-  if (BUS_VARIANTS.some((variant) => normalized.includes(normalizeLooseText(variant)))) return 'Bus';
-  if (INDEPENDENT_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`).test(normalized))) return 'Independiente';
-  return null;
+
+  const detected = [];
+  if (MOTO_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) detected.push('Moto');
+  if (CAR_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) detected.push('Carro');
+  if (BIKE_VARIANTS.some((variant) => new RegExp(`\\b${normalizeLooseText(variant)}\\b`).test(normalized))) detected.push('Bicicleta');
+  if (
+    BUS_VARIANTS.some((variant) => normalized.includes(normalizeLooseText(variant)))
+    || RIDE_HAIL_VARIANTS.some((variant) => normalized.includes(normalizeLooseText(variant)))
+  ) {
+    detected.push('Bus');
+  }
+  if (INDEPENDENT_VARIANTS.some((variant) => new RegExp(`\\b${variant}\\b`).test(normalized))) detected.push('Independiente');
+
+  if (!detected.length) return null;
+  return TRANSPORT_PRIORITY.find((value) => detected.includes(value)) || detected[0];
 }
 
 function cleanTransportSegment(value = '') {
@@ -196,8 +250,8 @@ function detectTransportFromSequence(text = '') {
 function detectExplicitGender(text = '') {
   const raw = String(text || '').trim();
   if (!raw) return null;
-  if (FEMALE_GENDER_PATTERNS.some((pattern) => pattern.test(raw))) return 'FEMALE';
-  if (MALE_GENDER_PATTERNS.some((pattern) => pattern.test(raw))) return 'MALE';
+  if ([...FEMALE_GENDER_PATTERNS, ...EXTRA_FEMALE_GENDER_PATTERNS].some((pattern) => pattern.test(raw))) return 'FEMALE';
+  if ([...MALE_GENDER_PATTERNS, ...EXTRA_MALE_GENDER_PATTERNS].some((pattern) => pattern.test(raw))) return 'MALE';
   return null;
 }
 
@@ -321,7 +375,7 @@ function normalizeMedicalRestrictions(value = '') {
   const raw = String(value || '').trim();
   const normalized = normalizeLooseText(raw);
   if (!normalized) return null;
-  if (/^(no tengo restriccion(?:es)?( medicas?)?|no cuento con restriccion(?:es)?( medicas?)?|sin restriccion(?:es)?( medicas?)?|sin ninguna restriccion|ninguna restriccion|restriccion(?:es)? medicas? ninguna|restriccion(?:es)? ninguna)$/.test(normalized)) {
+  if (looksLikeNoMedicalRestrictionsText(normalized, { allowImplicit: true })) {
     return 'Sin restricciones médicas';
   }
   return capitalizeWords(raw);
@@ -356,6 +410,7 @@ function looksLikeLocationChunk(value = '') {
   if (!normalized || normalized.length < 3 || normalized.length > 40) return false;
   if (/\d{3,}/.test(normalized)) return false;
   if (LOCATION_STOPWORDS.test(normalized)) return false;
+  if (EXTRA_LOCATION_STOPWORDS.test(normalized)) return false;
   if (looksLikeJobRoleChunk(normalized)) return false;
   if (detectTransportKeyword(normalized)) return false;
 
@@ -398,6 +453,12 @@ function normalizeExperienceInfo(value = '') {
   return null;
 }
 
+function looksLikeRoleOrIntentPhrase(value = '') {
+  const normalized = normalizeLooseText(value);
+  if (!normalized) return false;
+  return /\b(auxiliar|coordinador|coordinadora|operacion(?:es)?|logistica|logistico|cargue|descargue|bodega|vacante|cargo|requisit|interesad|cumplo|perfil|trabajo|anuncio|quedo atenta|quedo atento)\b/.test(normalized);
+}
+
 function detectDocumentTypeHint(text = '') {
   const patterns = [
     /\b(?:tipo(?:\s+de)?\s+documento|documento|identificacion|identificación)\s*(?:es|:|-)?\s*(c\.?\s*c\.?|c[ée]dula(?:\s+(?:de\s+)?ciudadan[ií]a)?|t\.?\s*i\.?|tarjeta\s+de\s+identidad|c\.?\s*e\.?|c[ée]dula\s+de\s+extranjer[ií]a|pasaporte|ppt)\b/i,
@@ -432,6 +493,7 @@ function sanitizeNameCandidate(value = '') {
     .split(/[\n,]/)[0]
     .replace(/\b(?:c\.?\s*c\.?|c[ée]dula|documento|t\.?\s*i\.?|c\.?\s*e\.?|pasaporte|ppt)\b.*$/i, '')
     .replace(/\b(?:deseo|quiero|estoy|me encuentro|me interesa|interesado|interesada|vacante|cargo|rol|puesto|documentacion|documentación|informacion|información|gracias)\b.*$/i, '')
+    .replace(/\b(?:cumplo|requisitos|coordinador|coordinadora|operaciones|logistica|logistico)\b.*$/i, '')
     .replace(/[.;:\-\s]+$/g, '')
     .trim();
 }
@@ -492,7 +554,7 @@ function detectLeadingName(text = '') {
   }
 
   const firstChunk = sanitizeNameCandidate(compact.split(/[\n,]/)[0]?.trim() || '');
-  if (hasNameTokens(firstChunk)) {
+  if (hasNameTokens(firstChunk) && !looksLikeRoleOrIntentPhrase(firstChunk)) {
     const candidate = capitalizeWords(firstChunk);
     if (!isSuspiciousFullName(candidate)) return candidate;
   }
@@ -572,7 +634,7 @@ export function parseNaturalData(text = '') {
     if (!result.neighborhood && inferredLocation.neighborhood) result.neighborhood = inferredLocation.neighborhood;
   }
 
-  const medicalNegative = /\b(no\s+tengo\s+restriccion(?:es)?(\s+medicas?)?|no\s+cuento\s+con\s+restriccion(?:es)?(\s+medicas?)?|sin\s+restriccion(?:es)?(\s+medicas?)?|ninguna\s+restriccion|restriccion(?:es)?\s+medicas?\s+ninguna|restriccion(?:es)?\s+ninguna)\b/i.test(normalizeLooseText(compact));
+  const medicalNegative = looksLikeNoMedicalRestrictionsText(compact);
   if (medicalNegative) result.medicalRestrictions = 'Sin restricciones médicas';
 
   const transportNegative = compact.match(/\b(?:no\s+(?:tengo|cuento\s+con)\s+(?:medio\s+de\s+transporte|transporte|moto|motocicleta|bicicleta|bici|cicla|carro|bus)|sin\s+(?:medio\s+de\s+transporte|transporte|moto|motocicleta|bicicleta|bici|cicla|carro|bus))\b/i);

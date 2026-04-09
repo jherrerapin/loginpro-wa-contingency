@@ -103,6 +103,7 @@
     </a>
     <a href="/admin">Candidatos</a>
     <a href="/admin/vacancies">Vacantes</a>
+    <a href="/admin/users">Usuarios</a>
     <% if (role === 'dev') { %>
       <a href="/admin/monitor">Monitor</a>
     <% } %>
@@ -246,6 +247,7 @@
           <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
           <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
           <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
+          <option value="CONTRATADO" <%= uiStatus === 'CONTRATADO' ? 'selected' : '' %>>Contratado</option>
           <option value="RECHAZADO" <%= uiStatus === 'RECHAZADO' ? 'selected' : '' %>>Rechazado</option>
         </select>
         <button type="submit">Guardar</button>
@@ -263,6 +265,43 @@
         <% } %>
       <% } %>
     </div>
+    <% if (role === 'dev') { %>
+    <div class="card">
+      <h2>Movimientos del reclutador</h2>
+      <% if (!adminEvents || adminEvents.length === 0) { %>
+        <p style="color:#64748b;">Aún no hay movimientos manuales registrados para este candidato.</p>
+      <% } else { %>
+        <div style="display:grid;gap:10px;">
+          <% for (const event of adminEvents) { %>
+            <% const actorLabel = formatActorRoleLabel(event.actorRole); %>
+            <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;background:#f8fafc;">
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:700;color:#1e293b;"><%= formatAdminEventLabel(event) %></div>
+                  <div style="font-size:13px;color:#64748b;">Por: <%= actorLabel %></div>
+                </div>
+                <div style="font-size:12px;color:#64748b;"><%= formatDateTimeCO(event.createdAt) %></div>
+              </div>
+              <% if (event.fromValue || event.toValue) { %>
+                <div style="margin-top:8px;font-size:13px;color:#334155;">
+                  <% if (event.fromValue && event.toValue) { %>
+                    <strong><%= event.fromValue %></strong> → <strong><%= event.toValue %></strong>
+                  <% } else if (event.toValue) { %>
+                    Valor: <strong><%= event.toValue %></strong>
+                  <% } else if (event.fromValue) { %>
+                    Valor previo: <strong><%= event.fromValue %></strong>
+                  <% } %>
+                </div>
+              <% } %>
+              <% if (event.note) { %>
+                <div style="margin-top:8px;font-size:13px;color:#475569;"><%= event.note %></div>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
+    <% } %>
 
     <% if (role === 'dev') { %>
     <div class="card">
@@ -541,6 +580,7 @@
               <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
               <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
               <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
+              <option value="CONTRATADO" <%= uiStatus === 'CONTRATADO' ? 'selected' : '' %>>Contratado</option>
               <option value="RECHAZADO" <%= uiStatus === 'RECHAZADO' ? 'selected' : '' %>>Rechazado</option>
             </select>
           </div>

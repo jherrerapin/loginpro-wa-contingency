@@ -137,7 +137,10 @@
   </a>
   <a href="/admin">Panel</a>
   <a href="/admin/vacancies" class="nav-active">Vacantes</a>
-  <a href="/admin/locations">Ciudades</a>
+  <a href="/admin/users">Usuarios</a>
+  <% if (role === 'dev') { %>
+    <a href="/admin/locations">Ciudades</a>
+  <% } %>
   <% if (role === 'dev') { %>
     <a href="/admin/monitor">Monitor</a>
   <% } %>
@@ -159,7 +162,9 @@
           <button type="submit" class="btn btn-secondary" <%= storageConfigured ? '' : 'disabled title=\"Configura R2 para ejecutar la migración\"' %>>Migrar HV almacenadas<% if (pendingCvMigrationCount) { %> (<%= pendingCvMigrationCount %>)<% } %></button>
         </form>
       <% } %>
-      <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
+      <% if (canCreateVacancies) { %>
+        <button class="btn btn-primary" onclick="openCreate()">➕ Nueva vacante</button>
+      <% } %>
     </div>
   </div>
 
@@ -263,7 +268,7 @@
           <div class="form-group full">
             <label for="c-operation">Operación / Zona <span style="color:var(--red)">*</span></label>
             <% if (operations.length === 0) { %>
-              <div class="no-ops-warn">⚠️ No hay operaciones configuradas. <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Crea ciudades y operaciones primero →</a></div>
+              <div class="no-ops-warn">⚠️ No hay operaciones configuradas.<% if (role === 'dev') { %> <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Crea ciudades y operaciones primero →</a><% } %></div>
               <input type="hidden" name="operationId" value="" />
             <% } else { %>
             <select id="c-operation" name="operationId" required>
@@ -426,7 +431,7 @@
           <div class="form-group full">
             <label for="e-operation">Operación / Zona</label>
             <% if (operations.length === 0) { %>
-              <div class="no-ops-warn">⚠️ Sin operaciones. <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Configurar →</a></div>
+              <div class="no-ops-warn">⚠️ Sin operaciones.<% if (role === 'dev') { %> <a href="/admin/locations" style="color:var(--amber);font-weight:700;">Configurar →</a><% } %></div>
               <input type="hidden" name="operationId" value="" />
             <% } else { %>
             <select id="e-operation" name="operationId">

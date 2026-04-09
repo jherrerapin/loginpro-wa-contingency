@@ -18,6 +18,18 @@ enum CandidateStatus {
   APROBADO
   RECHAZADO
   CONTACTADO
+  CONTRATADO
+}
+
+enum AppUserRole {
+  DEV
+  ADMIN
+}
+
+enum UserAccessScope {
+  ALL
+  CITY
+  VACANCY
 }
 
 enum ConversationStep {
@@ -147,6 +159,7 @@ model Vacancy {
   candidates             Candidate[]
   interviewSlots         InterviewSlot[]
   interviewBookings      InterviewBooking[]
+  accessUsers            AppUser[]
 }
 
 // ─────────────────────────────────────────────
@@ -256,6 +269,7 @@ model Candidate {
 
   messages                 Message[]
   interviewBookings        InterviewBooking[]
+  adminEvents              CandidateAdminEvent[]
 }
 
 // ─────────────────────────────────────────────
@@ -273,4 +287,41 @@ model Message {
   rawPayload   Json?
   respondedAt  DateTime?
   createdAt    DateTime         @default(now())
+}
+
+model CandidateAdminEvent {
+  id         String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  actorRole   String
+  eventType   String
+  eventLabel  String
+  fromValue   String?
+  toValue     String?
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId, createdAt])
+}
+
+model AppUser {
+  id                  String          @id @default(cuid())
+  username            String          @unique
+  passwordHash        String
+  recoveryCodeHash    String?
+  role                AppUserRole     @default(ADMIN)
+  accessScope         UserAccessScope @default(ALL)
+  scopeCity           String?
+  scopeVacancyId      String?
+  scopeVacancy        Vacancy?        @relation(fields: [scopeVacancyId], references: [id], onDelete: SetNull)
+  recoveryPhone       String?
+  recoveryEmail       String?
+  createdByUsername   String?
+  lastPasswordResetAt DateTime?
+  isActive            Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([accessScope, scopeCity])
+  @@index([scopeVacancyId])
 }
