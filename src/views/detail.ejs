@@ -95,6 +95,8 @@
     .action-btn-warn { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
     .action-btn-danger { border-color: #fca5a5; background: #fee2e2; color: #b8322b; }
     .action-btn-neutral { border-color: #cbd5e1; background: #eef2f7; color: #475569; }
+    /* Estado seleccionado para radio behavior */
+    .action-btn[data-selected="true"] { box-shadow: 0 0 0 2px currentColor; font-weight: 900; }
     .booking-reschedule { margin-top: 0; }
     .booking-actions .booking-reschedule { display: inline-flex; align-items: flex-start; flex: 0 0 auto; }
     .booking-actions .booking-reschedule[open] { display: block; flex: 1 1 100%; }
@@ -499,11 +501,26 @@
                 <div class="booking-status <%= bookingUi.cls %>"><%= bookingUi.text %></div>
               </div>
               <div class="booking-actions">
+                <%
+                  // Determina si hay una accion ya seleccionada para este booking
+                  const selectedActionKey = visibleBookingActions.find(a => booking.status === a.status)?.key || null;
+                %>
                 <% for (const action of visibleBookingActions) { %>
+                  <%
+                    const isSelected = booking.status === action.status;
+                    const isDisabledBySelection = selectedActionKey !== null && !isSelected;
+                  %>
                   <form method="post" action="/admin/interviews/<%= booking.id %>/status">
                     <input type="hidden" name="action" value="<%= action.key %>" />
                     <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-                    <button type="submit" class="action-btn <%= action.cls %>" <%= booking.status === action.status ? 'disabled' : '' %>><%= action.label %></button>
+                    <button
+                      type="submit"
+                      class="action-btn <%= action.cls %> booking-action-btn"
+                      data-booking-id="<%= booking.id %>"
+                      data-action-key="<%= action.key %>"
+                      <%= isSelected ? 'data-selected="true"' : '' %>
+                      <%= isDisabledBySelection ? 'disabled' : '' %>
+                    ><%= action.label %></button>
                   </form>
                 <% } %>
                 <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
@@ -733,5 +750,33 @@
     </div>
     <% } %>
   </div>
+
+  <script>
+  // Radio behavior para botones de accion de entrevista
+  // Al seleccionar uno, los demas del mismo booking se deshabilitan
+  // Si el estado viene del servidor (data-selected), los demas ya vienen disabled desde el HTML
+  // Este script maneja clicks del usuario antes de que el form se envie
+  (function () {
+    document.querySelectorAll('.booking-action-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var bookingId = this.dataset.bookingId;
+        var actionKey = this.dataset.actionKey;
+        // Desmarcar todos del mismo booking
+        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+          b.removeAttribute('data-selected');
+          b.disabled = false;
+        });
+        // Marcar el clickeado
+        this.setAttribute('data-selected', 'true');
+        // Deshabilitar los otros
+        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+          if (b.dataset.actionKey !== actionKey) {
+            b.disabled = true;
+          }
+        });
+      });
+    });
+  })();
+  </script>
 </body>
 </html>
