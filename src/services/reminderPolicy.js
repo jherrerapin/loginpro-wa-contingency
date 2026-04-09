@@ -103,3 +103,23 @@ export function shouldMarkInterviewNoResponsePolicy(candidate, booking, now = ne
 
   return now.getTime() >= scheduledAt.getTime() - INTERVIEW_NO_RESPONSE_LEAD_MS;
 }
+
+/**
+ * Devuelve true si la entrevista está programada para HOY (hora Colombia UTC-5).
+ * Solo cuando esto es verdadero el candidato puede confirmar su asistencia.
+ */
+export function isInterviewToday(booking, now = new Date()) {
+  if (!booking?.scheduledAt) return false;
+  const scheduledAt = new Date(booking.scheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) return false;
+
+  // Colombia = UTC-5 (sin horario de verano)
+  const CO_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+  const toLocalDay = (d) => {
+    const shifted = new Date(d.getTime() - CO_OFFSET_MS);
+    return `${shifted.getUTCFullYear()}-${shifted.getUTCMonth()}-${shifted.getUTCDate()}`;
+  };
+
+  return toLocalDay(scheduledAt) === toLocalDay(now);
+}
