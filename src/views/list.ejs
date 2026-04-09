@@ -843,6 +843,8 @@
     { key: 'cancelled', label: 'Canceló', cls: 'action-btn-neutral', status: 'CANCELLED' },
     { key: 'rescheduled', label: 'Reagendó', cls: 'action-btn-warn', status: 'RESCHEDULED' }
   ];
+  const isDevRole = role === 'dev';
+  const recruiterBookingActions = bookingActions.filter((action) => ['attended', 'no_show'].includes(action.key));
 
   const candidateStatusBadge = {
     NUEVO:      { cls: 'badge-nuevo',      label: 'Nuevo' },
@@ -1175,12 +1177,15 @@
                       <td><span class="cv-pill <%= b.candidate.hasCv ? 'cv-yes' : 'cv-no' %>"><%= b.candidate.hasCv ? '✓ HV' : 'Sin HV' %></span></td>
                       <td>
                         <div class="action-stack">
-                          <% for (const action of bookingActions) { %>
+                          <% for (const action of (isDevRole ? bookingActions : recruiterBookingActions)) { %>
                             <form method="post" action="/admin/interviews/<%= b.id %>/status" class="action-form">
                               <input type="hidden" name="action" value="<%= action.key %>" />
                               <input type="hidden" name="returnTo" value="<%= currentDashboardPath %>" />
                               <button type="submit" class="action-btn <%= action.cls %>" <%= b.status === action.status ? 'disabled' : '' %>><%= action.label %></button>
                             </form>
+                          <% } %>
+                          <% if (!isDevRole) { %>
+                            <a href="<%= candidateDetailHref(b.candidate) %>#interviews-card" class="action-btn action-btn-warn">Reagendó</a>
                           <% } %>
                           <a href="<%= candidateDetailHref(b.candidate) %>" class="link-detail">Ver →</a>
                         </div>

@@ -84,8 +84,8 @@
     .booking-status-no_response { color: #7c3aed; }
     .booking-status-no_show { color: #b8322b; }
     .booking-status-cancelled { color: #6b7280; text-decoration: line-through; }
-    .booking-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-    .booking-actions form { display: inline; }
+    .booking-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+    .booking-actions form { display: inline-flex; }
     .action-btn {
       border: 1px solid #d1d5db; border-radius: 999px; padding: 6px 10px; background: #fff;
       font-size: 12px; font-weight: 700; cursor: pointer; color: #475569;
@@ -95,6 +95,25 @@
     .action-btn-warn { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
     .action-btn-danger { border-color: #fca5a5; background: #fee2e2; color: #b8322b; }
     .action-btn-neutral { border-color: #cbd5e1; background: #eef2f7; color: #475569; }
+    .booking-reschedule { margin-top: 12px; }
+    .booking-reschedule summary {
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    .booking-reschedule summary::-webkit-details-marker { display: none; }
+    .booking-reschedule-panel {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #fff;
+      display: grid;
+      gap: 10px;
+    }
+    .booking-reschedule-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .booking-reschedule-form .field-group { flex: 1; min-width: 220px; }
+    .booking-reschedule-note { font-size: 12px; color: #92400e; }
     @media (max-width: 900px) {
       .navbar {
         flex-wrap: wrap;
@@ -125,7 +144,8 @@
       .cv-actions,
       .booking-head,
       .booking-actions,
-      .booking-manual form {
+      .booking-manual form,
+      .booking-reschedule-form {
         flex-direction: column;
         align-items: stretch;
       }
@@ -231,7 +251,7 @@
       <div class="alert alert-error"><%= bookingError %></div>
     <% } %>
 
-    <div class="card">
+    <div class="card" id="interviews-card">
       <h2>Datos del candidato</h2>
       <div class="info-grid">
         <div class="info-item">
@@ -480,30 +500,6 @@
                     <button type="submit" class="action-btn <%= action.cls %>" <%= booking.status === action.status ? 'disabled' : '' %>><%= action.label %></button>
                   </form>
                 <% } %>
-                <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
-                  <details style="width:100%;">
-                    <summary class="action-btn action-btn-warn" style="list-style:none;display:inline-flex;">Reagendó</summary>
-                    <div style="margin-top:10px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
-                      <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
-                        <form method="post" action="/admin/candidates/<%= candidate.id %>/interview-assign" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-                          <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-                          <div class="field-group" style="flex:1;min-width:220px;">
-                            <label for="slotOption-<%= booking.id %>">Nueva fecha y hora de entrevista</label>
-                            <select id="slotOption-<%= booking.id %>" name="slotOption" required>
-                              <option value="">Selecciona un nuevo horario</option>
-                              <% for (const option of availableInterviewSlots) { %>
-                                <option value="<%= option.slot.id %>|<%= option.date.toISOString() %>"><%= option.formattedDate %></option>
-                              <% } %>
-                            </select>
-                          </div>
-                          <button type="submit" class="action-btn action-btn-warn">Confirmar reagendamiento</button>
-                        </form>
-                      <% } else { %>
-                        <div style="font-size:12px;color:#92400e;">No hay horarios disponibles esta semana. Se deberá contactar al candidato para concretar un nuevo horario.</div>
-                      <% } %>
-                    </div>
-                  </details>
-                <% } %>
                 <% if (isDevRole) { %>
                   <form method="post" action="/admin/interviews/<%= booking.id %>/delete" onsubmit="return confirm('¿Seguro que deseas eliminar este agendamiento? Esta acción no se puede deshacer.');">
                     <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
@@ -511,6 +507,30 @@
                   </form>
                 <% } %>
               </div>
+              <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
+                <details class="booking-reschedule">
+                  <summary class="action-btn action-btn-warn">Reagendó</summary>
+                  <div class="booking-reschedule-panel">
+                    <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
+                      <form method="post" action="/admin/candidates/<%= candidate.id %>/interview-assign" class="booking-reschedule-form">
+                        <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
+                        <div class="field-group">
+                          <label for="slotOption-<%= booking.id %>">Nueva fecha y hora de entrevista</label>
+                          <select id="slotOption-<%= booking.id %>" name="slotOption" required>
+                            <option value="">Selecciona un nuevo horario</option>
+                            <% for (const option of availableInterviewSlots) { %>
+                              <option value="<%= option.slot.id %>|<%= option.date.toISOString() %>"><%= option.formattedDate %></option>
+                            <% } %>
+                          </select>
+                        </div>
+                        <button type="submit" class="action-btn action-btn-warn">Confirmar reagendamiento</button>
+                      </form>
+                    <% } else { %>
+                      <div class="booking-reschedule-note">No hay horarios disponibles esta semana. Se deberá contactar al candidato para concretar un nuevo horario.</div>
+                    <% } %>
+                  </div>
+                </details>
+              <% } %>
             </div>
           <% } %>
         </div>
