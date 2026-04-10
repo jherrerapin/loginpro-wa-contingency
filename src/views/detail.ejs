@@ -6,100 +6,252 @@
   <title>Detalle candidato</title>
   <link rel="icon" type="image/png" href="/public/favicon-loginpro.svg" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; color: #333; }
-    .navbar { background: #2c3e50; padding: 12px 24px; display: flex; align-items: center; gap: 20px; }
-    .navbar a { color: #ecf0f1; text-decoration: none; font-weight: 500; font-size: 14px; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; color: #333; font-size: 15px; line-height: 1.5; }
+
+    /* ── Navbar ── */
+    .navbar {
+      background: #2c3e50;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .navbar a { color: #ecf0f1; text-decoration: none; font-weight: 500; font-size: 14px; white-space: nowrap; }
     .navbar a:hover { color: #3498db; }
-    .navbar form button:hover { border-color: #3498db !important; color: #3498db !important; }
-    .navbar .brand { display: inline-flex; align-items: center; margin-right: 12px; }
-    .navbar .brand img { height: 30px; width: auto; display: block; object-fit: contain; }
-    .container { margin: 24px; }
+    .navbar .brand { display: inline-flex; align-items: center; flex-shrink: 0; }
+    .navbar .brand img { height: 28px; width: auto; display: block; }
+    .navbar-logout { margin-left: auto; }
+    .navbar-logout button {
+      background: transparent; border: 1px solid #ecf0f1; color: #ecf0f1;
+      padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
+      white-space: nowrap;
+    }
+    .navbar-logout button:hover { border-color: #3498db; color: #3498db; }
+
+    /* ── Layout ── */
+    .container { max-width: 900px; margin: 0 auto; padding: 20px 16px 48px; }
     a { color: #3498db; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .back-link { display: inline-block; margin-bottom: 16px; font-size: 14px; }
-    h1 { margin-bottom: 20px; color: #2c3e50; }
-    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
-    .card h2 { margin-bottom: 12px; font-size: 16px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
-    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-    .info-item label { display: block; font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; }
-    .info-item span { font-size: 15px; color: #333; }
-    .status-form { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-    .status-form select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-    .status-form button { padding: 6px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .status-form button:hover { background: #2980b9; }
-    .edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
-    .field-group { display: flex; flex-direction: column; gap: 6px; }
-    .field-group label { font-size: 12px; color: #666; font-weight: 600; }
-    .field-group input, .field-group select, .field-group textarea { padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-    .field-group textarea { min-height: 96px; resize: vertical; font-family: inherit; }
-    .field-group-full { grid-column: 1 / -1; }
-    .form-actions { margin-top: 14px; display: flex; gap: 10px; }
-    .btn-primary { padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .btn-primary:hover { background: #2980b9; }
-    .btn-secondary { padding: 8px 16px; border: 1px solid #ccc; border-radius: 4px; color: #555; font-size: 14px; text-decoration: none; background: #fff; }
-    .messages-list { max-height: 500px; overflow-y: auto; }
-    .msg { padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; max-width: 80%; }
-    .msg-bot { background: #e8f5e9; margin-right: auto; }
-    .msg-candidato { background: #e3f2fd; margin-left: auto; }
-    .msg-header { font-size: 11px; color: #888; margin-bottom: 4px; }
-    .msg-body { font-size: 14px; white-space: pre-wrap; word-break: break-word; }
-    .btn-wa { display: inline-block; padding: 8px 18px; background: #25d366; color: #fff; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 14px; margin-top: 12px; }
-    .btn-wa:hover { background: #1ebe57; color: #fff; text-decoration: none; }
-    .btn-cv { display: inline-block; padding: 8px 18px; background: #e67e22; color: #fff; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 14px; margin-top: 12px; margin-left: 8px; }
-    .btn-cv:hover { background: #cf6d17; color: #fff; text-decoration: none; }
-    .alert { padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
-    .alert-success { background: #e8f5e9; color: #1f7a38; border: 1px solid #b7e1c0; }
-    .alert-error { background: #fdecea; color: #b8322b; border: 1px solid #f3b3ad; }
-    .cv-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
-    .inline-upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .btn-danger { padding: 8px 16px; background: #c0392b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .btn-danger:hover { background: #a93226; }
-    .header-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-    .header-line h1 { margin-bottom: 0; }
+    .back-link { display: inline-block; margin-bottom: 14px; font-size: 14px; }
+
+    /* ── Header ── */
+    .header-line { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .header-line h1 { margin: 0; color: #2c3e50; font-size: clamp(18px, 4vw, 26px); word-break: break-word; }
     .badge-human-review {
       display: inline-flex; align-items: center; gap: 4px;
-      padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
-      background: #fef3c7; color: #92400e;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: #fef3c7; color: #92400e; white-space: nowrap;
     }
     .badge-female {
       display: inline-flex; align-items: center; gap: 4px;
-      padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
-      background: #fce7f3; color: #be185d;
+      padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: #fce7f3; color: #be185d; white-space: nowrap;
     }
+
+    /* ── Cards ── */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.09);
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      overflow: hidden;
+    }
+    .card h2 {
+      margin-bottom: 14px;
+      font-size: 15px;
+      color: #2c3e50;
+      border-bottom: 2px solid #3498db;
+      padding-bottom: 6px;
+    }
+
+    /* ── Info grid ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .info-item label {
+      display: block;
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: .03em;
+      margin-bottom: 2px;
+    }
+    .info-item span {
+      font-size: 14px;
+      color: #333;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      display: block;
+      max-width: 100%;
+    }
+
+    /* ── Alerts ── */
+    .alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 14px; }
+    .alert-success { background: #e8f5e9; color: #1f7a38; border: 1px solid #b7e1c0; }
+    .alert-error   { background: #fdecea; color: #b8322b; border: 1px solid #f3b3ad; }
+
+    /* ── Forms ── */
+    .status-form { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    .status-form select, .status-form input[type="text"] {
+      padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; flex: 1; min-width: 0;
+    }
+    .status-form button { padding: 7px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+    .status-form button:hover { background: #2980b9; }
+    .edit-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+    .field-group { display: flex; flex-direction: column; gap: 5px; }
+    .field-group label { font-size: 12px; color: #666; font-weight: 600; }
+    .field-group input, .field-group select, .field-group textarea {
+      padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 100%;
+    }
+    .field-group textarea { min-height: 80px; resize: vertical; font-family: inherit; }
+    .field-group-full { grid-column: 1 / -1; }
+    .form-actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* ── Buttons ── */
+    .btn-primary   { padding: 8px 16px; background: #3498db; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+    .btn-primary:hover { background: #2980b9; }
+    .btn-secondary { padding: 8px 16px; border: 1px solid #ccc; border-radius: 4px; color: #555; font-size: 14px; text-decoration: none; background: #fff; display: inline-block; }
+    .btn-danger    { padding: 8px 16px; background: #c0392b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .btn-danger:hover { background: #a93226; }
+    .btn-wa  { display: inline-block; padding: 8px 16px; background: #25d366; color: #fff; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 14px; margin-top: 12px; }
+    .btn-wa:hover { background: #1ebe57; color: #fff; text-decoration: none; }
+    .btn-cv  { display: inline-block; padding: 8px 16px; background: #e67e22; color: #fff; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 14px; margin-top: 12px; margin-left: 8px; }
+    .btn-cv:hover { background: #cf6d17; color: #fff; text-decoration: none; }
+
+    /* ── CV ── */
+    .cv-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+    .inline-upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* ── Chat ── */
+    .messages-list { max-height: 520px; overflow-y: auto; }
+    .msg { padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; max-width: min(80%, 540px); }
+    .msg-bot       { background: #e8f5e9; margin-right: auto; }
+    .msg-candidato { background: #e3f2fd; margin-left: auto; }
+    .msg-header { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .msg-body   { font-size: 14px; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word; }
+
+    /* ── Booking card ── */
     .booking-list { display: grid; gap: 12px; }
-    .booking-item { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; background: #fafafa; }
+    .booking-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 14px;
+      background: #fafafa;
+      overflow: hidden;
+    }
     .booking-manual {
-      border: 1px solid #dbeafe; border-radius: 8px; padding: 14px; background: #f8fbff; margin-bottom: 14px;
+      border: 1px solid #dbeafe;
+      border-radius: 10px;
+      padding: 14px;
+      background: #f8fbff;
+      margin-bottom: 14px;
     }
     .booking-manual form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-    .booking-manual .field-group { min-width: 280px; flex: 1; }
-    .booking-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-    .booking-title { font-weight: 700; color: #2c3e50; }
-    .booking-meta { font-size: 13px; color: #666; }
-    .booking-status { font-size: 13px; font-weight: 700; min-width: 108px; text-align: right; }
-    .booking-status-confirmed { color: #1f7a38; }
-    .booking-status-scheduled { color: #2980b9; }
+    .booking-manual .field-group { min-width: 240px; flex: 1; }
+    .booking-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      align-items: flex-start;
+    }
+    .booking-title { font-weight: 700; color: #2c3e50; font-size: 14px; word-break: break-word; }
+    .booking-meta  { font-size: 13px; color: #666; margin-top: 2px; }
+    .booking-status { font-size: 13px; font-weight: 700; min-width: 90px; text-align: right; flex-shrink: 0; }
+    .booking-status-confirmed   { color: #2980b9; }
+    .booking-status-attended    { color: #1f7a38; }
+    .booking-status-scheduled   { color: #2980b9; }
     .booking-status-rescheduled { color: #b45309; }
     .booking-status-no_response { color: #7c3aed; }
-    .booking-status-no_show { color: #b8322b; }
-    .booking-status-cancelled { color: #6b7280; text-decoration: line-through; }
-    .booking-actions { display: flex; gap: 8px; flex-wrap: nowrap; margin-top: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 2px; }
+    .booking-status-no_show     { color: #b8322b; }
+    .booking-status-cancelled   { color: #6b7280; text-decoration: line-through; }
+
+    /* ── Booking moment badges ── */
+    .booking-moments {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .moment-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .moment-label {
+      color: #64748b;
+      font-weight: 600;
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .moment-value {
+      font-weight: 700;
+    }
+    .moment-confirmed   { color: #2980b9; }
+    .moment-attended    { color: #1f7a38; }
+    .moment-no_show     { color: #b8322b; }
+    .moment-no_response { color: #7c3aed; }
+    .moment-pending     { color: #94a3b8; font-style: italic; }
+
+    /* ── Booking action buttons ── */
+    .booking-section {
+      border-top: 1px solid #f0f0f0;
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    .booking-section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: .05em;
+      margin-bottom: 6px;
+    }
+    .booking-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
     .booking-actions form { display: inline-flex; flex: 0 0 auto; }
     .action-btn {
-      border: 1px solid #d1d5db; border-radius: 999px; padding: 6px 10px; background: #fff;
-      font-size: 12px; font-weight: 700; cursor: pointer; color: #475569;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #475569;
+      white-space: nowrap;
+      transition: opacity 0.15s, box-shadow 0.15s;
     }
-    .action-btn:disabled { opacity: .55; cursor: default; }
-    .action-btn-ok { border-color: #86efac; background: #dcfce7; color: #15803d; }
-    .action-btn-warn { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
-    .action-btn-danger { border-color: #fca5a5; background: #fee2e2; color: #b8322b; }
+    .action-btn:hover:not(:disabled) { opacity: .85; }
+    .action-btn:disabled { opacity: .45; cursor: default; }
+    .action-btn-ok      { border-color: #86efac; background: #dcfce7; color: #15803d; }
+    .action-btn-warn    { border-color: #fcd34d; background: #fef3c7; color: #b45309; }
+    .action-btn-danger  { border-color: #fca5a5; background: #fee2e2; color: #b8322b; }
     .action-btn-neutral { border-color: #cbd5e1; background: #eef2f7; color: #475569; }
-    /* Estado seleccionado para radio behavior */
-    .action-btn[data-selected="true"] { box-shadow: 0 0 0 2px currentColor; font-weight: 900; }
+    .action-btn-blue    { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
+    /* Estado seleccionado */
+    .action-btn[data-selected="true"] {
+      box-shadow: 0 0 0 2.5px currentColor;
+      font-weight: 900;
+    }
+
+    /* ── Reschedule details ── */
     .booking-reschedule { margin-top: 0; }
-    .booking-actions .booking-reschedule { display: inline-flex; align-items: flex-start; flex: 0 0 auto; }
-    .booking-actions .booking-reschedule[open] { display: block; flex: 1 1 100%; }
     .booking-reschedule summary {
       list-style: none;
       display: inline-flex;
@@ -116,57 +268,92 @@
       gap: 10px;
     }
     .booking-reschedule-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-    .booking-reschedule-form .field-group { flex: 1; min-width: 220px; }
+    .booking-reschedule-form .field-group { flex: 1; min-width: 200px; }
     .booking-reschedule-note { font-size: 12px; color: #92400e; }
-    @media (max-width: 900px) {
-      .navbar {
-        flex-wrap: wrap;
-        gap: 10px 16px;
-        padding: 10px 16px;
-      }
-      .container { margin: 16px 12px 36px; }
-      .card { padding: 16px; }
-      .info-grid,
-      .edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .messages-list { max-height: none; }
+
+    /* ── Admin events ── */
+    .event-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      background: #f8fafc;
     }
-    @media (max-width: 680px) {
-      .navbar { height: auto; }
-      .navbar form {
-        width: 100%;
-        margin-left: 0 !important;
-      }
-      .navbar form button { width: 100%; }
-      .container { margin: 12px; }
-      .header-line { align-items: flex-start; }
-      .info-grid,
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    /* ═══════════════════════════════════
+       RESPONSIVE — tablets (≤ 860px)
+    ═══════════════════════════════════ */
+    @media (max-width: 860px) {
+      .container { padding: 16px 14px 40px; }
+      .card { padding: 14px 16px; }
+      .info-grid { grid-template-columns: repeat(2, 1fr); }
+      .edit-form  { grid-template-columns: repeat(2, 1fr); }
+      .messages-list { max-height: 400px; }
+    }
+
+    /* ═══════════════════════════════════
+       RESPONSIVE — móvil (≤ 600px)
+    ═══════════════════════════════════ */
+    @media (max-width: 600px) {
+      body { font-size: 14px; }
+      .navbar { padding: 8px 12px; gap: 10px 12px; }
+      .navbar a { font-size: 13px; }
+      .navbar-logout { width: 100%; }
+      .navbar-logout button { width: 100%; }
+      .container { padding: 12px 10px 40px; }
+      .card { padding: 12px 14px; border-radius: 8px; }
+
+      /* info grid: 2 columnas en móvil, 1 solo cuando hay items full-width */
+      .info-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .info-item span { font-size: 13px; }
+
+      /* forms */
       .edit-form { grid-template-columns: 1fr; }
       .field-group-full { grid-column: auto; }
-      .status-form,
-      .form-actions,
-      .inline-upload,
-      .cv-actions,
-      .booking-head,
-      .booking-actions,
-      .booking-manual form,
-      .booking-reschedule-form {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .booking-actions { flex-wrap: wrap; overflow-x: visible; }
+      .status-form { flex-direction: column; align-items: stretch; }
       .status-form select,
-      .status-form button,
-      .btn-primary,
-      .btn-secondary,
-      .btn-danger,
-      .btn-wa,
-      .btn-cv {
-        width: 100%;
-        text-align: center;
-      }
-      .btn-cv { margin-left: 0; }
-      .msg { max-width: 100%; }
+      .status-form input[type="text"],
+      .status-form button { width: 100%; }
+      .form-actions { flex-direction: column; }
+      .form-actions .btn-primary,
+      .form-actions .btn-secondary { width: 100%; text-align: center; }
+
+      /* booking */
+      .booking-head { flex-direction: column; gap: 4px; }
+      .booking-status { text-align: left; min-width: 0; }
+      .booking-actions { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .booking-manual form { flex-direction: column; }
       .booking-manual .field-group { min-width: 0; }
+      .booking-reschedule-form { flex-direction: column; }
+      .booking-reschedule-form .field-group { min-width: 0; }
+
+      /* CV + WA */
+      .btn-wa, .btn-cv { display: block; text-align: center; margin-left: 0; margin-top: 10px; }
+      .cv-actions { flex-direction: column; align-items: stretch; }
+      .cv-actions a,
+      .cv-actions button { width: 100%; text-align: center; }
+      .inline-upload { flex-direction: column; align-items: stretch; }
+      .inline-upload input[type="file"] { width: 100%; }
+      .inline-upload button { width: 100%; }
+
+      /* chat */
+      .msg { max-width: 90%; }
+      .messages-list { max-height: none; }
+    }
+
+    /* ═══════════════════════════════════
+       Pantallas muy anchas (≥ 1200px)
+       Limitar ancho de texto legible
+    ═══════════════════════════════════ */
+    @media (min-width: 1200px) {
+      .msg-body { max-width: 600px; }
+      .info-item span { max-width: 100%; }
     }
   </style>
 </head>
@@ -177,86 +364,94 @@
     </a>
     <a href="/admin">Candidatos</a>
     <a href="/admin/vacancies">Vacantes</a>
-    <% if (typeof canManageUsers !== 'undefined' && canManageUsers) { %><a href="/admin/users">Usuarios</a><% } %>
+    <% if (typeof canManageUsers !== 'undefined' && canManageUsers) { %>
+      <a href="/admin/users">Usuarios</a>
+    <% } %>
     <% if (role === 'dev') { %>
       <a href="/admin/monitor">Monitor</a>
     <% } %>
-    <form method="post" action="/logout" style="margin-left:auto;">
-      <button type="submit" style="background:transparent;border:1px solid #ecf0f1;color:#ecf0f1;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;">Cerrar sesión</button>
+    <form method="post" action="/logout" class="navbar-logout">
+      <button type="submit">Cerrar sesión</button>
     </form>
   </nav>
+
   <%
     const normalizeCityName = (value) => String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const usesLocality = normalizeCityName(candidate?.vacancy?.city) === 'bogota';
     const residenceLabel = usesLocality ? 'Localidad' : 'Barrio';
     const residenceValue = usesLocality
       ? (candidate.locality || candidate.neighborhood || candidate.zone || '')
       : (candidate.neighborhood || candidate.locality || candidate.zone || '');
   %>
+
   <div class="container">
     <a href="<%= returnToPath || '/admin' %>" class="back-link">&larr; Volver al listado</a>
+
     <div class="header-line">
       <h1><%= candidate.fullName || 'Candidato sin nombre' %></h1>
       <% if (candidate.gender === 'FEMALE') { %>
         <span class="badge-female">Candidata femenina</span>
       <% } %>
       <% if (isFemaleHumanReviewCandidate(candidate)) { %>
-        <span class="badge-human-review">Revisión humana candidata femenina</span>
+        <span class="badge-human-review">Revisión humana</span>
       <% } %>
     </div>
-    <% const uiStatus = normalizeCandidateStatusForUI(candidate.status); %>
-    <% const detailReturnTo = '/admin/candidates/' + candidate.id + '?returnTo=' + encodeURIComponent(returnToPath || '/admin'); %>
-    <% const whatsappHref = '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(detailReturnTo); %>
-    <% const bookingStatusLabel = {
-      SCHEDULED:   { cls: 'booking-status-scheduled', text: 'Agendada' },
-      CONFIRMED:   { cls: 'booking-status-confirmed', text: 'Confirmada' },
-      RESCHEDULED: { cls: 'booking-status-rescheduled', text: 'Reagendó' },
-      NO_RESPONSE: { cls: 'booking-status-no_response', text: 'No contesta' },
-      NO_SHOW:     { cls: 'booking-status-no_show', text: 'No asistió' },
-      CANCELLED:   { cls: 'booking-status-cancelled', text: 'Canceló' }
-    }; %>
-    <% const isDevRole = String(role) === 'dev'; %>
-    <% const bookingActions = [
-      { key: 'confirmed', label: 'Confirmada', cls: 'action-btn-ok', status: 'CONFIRMED' },
-      { key: 'attended', label: 'Asistió', cls: 'action-btn-ok', status: 'CONFIRMED' },
-      { key: 'no_response', label: 'No contesta', cls: 'action-btn-warn', status: 'NO_RESPONSE' },
-      { key: 'no_show', label: 'No asistió', cls: 'action-btn-danger', status: 'NO_SHOW' },
-      { key: 'cancelled', label: 'Canceló', cls: 'action-btn-neutral', status: 'CANCELLED' },
-      { key: 'rescheduled', label: 'Reagendó', cls: 'action-btn-warn', status: 'RESCHEDULED' }
-    ]; %>
-    <% const recruiterBookingActions = bookingActions.filter((action) => ['attended', 'no_show'].includes(action.key)); %>
-    <% const visibleBookingActions = isDevRole ? bookingActions : recruiterBookingActions; %>
-    <% const canRenderManualSchedulePanel = candidate.vacancy?.schedulingEnabled && (isDevRole || !(candidate.interviewBookings || []).some((booking) => ['SCHEDULED', 'CONFIRMED'].includes(booking.status))); %>
-    <% const interviewWindowManaged = ['SCHEDULING', 'SCHEDULED'].includes(candidate.currentStep); %>
 
-    <% if (cvSuccess) { %>
-      <div class="alert alert-success"><%= cvSuccess %></div>
-    <% } %>
-    <% if (cvError) { %>
-      <div class="alert alert-error"><%= cvError %></div>
-    <% } %>
-    <% if (outboundSuccess) { %>
-      <div class="alert alert-success"><%= outboundSuccess %></div>
-    <% } %>
-    <% if (outboundError) { %>
-      <div class="alert alert-error"><%= outboundError %></div>
-    <% } %>
-    <% if (role === 'dev' && botPauseSuccess) { %>
-      <div class="alert alert-success"><%= botPauseSuccess %></div>
-    <% } %>
-    <% if (role === 'dev' && botPauseError) { %>
-      <div class="alert alert-error"><%= botPauseError %></div>
-    <% } %>
-    <% if (bookingSuccess) { %>
-      <div class="alert alert-success"><%= bookingSuccess %></div>
-    <% } %>
-    <% if (bookingError) { %>
-      <div class="alert alert-error"><%= bookingError %></div>
-    <% } %>
+    <%
+      const uiStatus = normalizeCandidateStatusForUI(candidate.status);
+      const detailReturnTo = '/admin/candidates/' + candidate.id + '?returnTo=' + encodeURIComponent(returnToPath || '/admin');
+      const whatsappHref = '/admin/candidates/' + candidate.id + '/open-whatsapp?returnTo=' + encodeURIComponent(detailReturnTo);
 
+      // ── Labels de estado de booking ──
+      const bookingStatusLabel = {
+        SCHEDULED:   { cls: 'booking-status-scheduled',   text: 'Agendada' },
+        CONFIRMED:   { cls: 'booking-status-confirmed',   text: 'Confirmada (candidato)' },
+        ATTENDED:    { cls: 'booking-status-attended',    text: 'Asistió' },
+        RESCHEDULED: { cls: 'booking-status-rescheduled', text: 'Reagendó' },
+        NO_RESPONSE: { cls: 'booking-status-no_response', text: 'No contesta' },
+        NO_SHOW:     { cls: 'booking-status-no_show',     text: 'No asistió' },
+        CANCELLED:   { cls: 'booking-status-cancelled',   text: 'Canceló' }
+      };
+
+      const isDevRole = String(role) === 'dev';
+
+      // ── Acciones para el reclutador: solo asistencia (post-entrevista) ──
+      // CONFIRMED lo asigna el bot cuando el candidato confirma el mismo día.
+      // ATTENDED / NO_SHOW / NO_RESPONSE los registra el reclutador DESPUÉS de la cita.
+      const recruiterAttendanceActions = [
+        { key: 'attended',     label: '✓ Asistió',     cls: 'action-btn-ok',      status: 'ATTENDED'     },
+        { key: 'no_show',      label: '✗ No asistió',  cls: 'action-btn-danger',  status: 'NO_SHOW'      },
+        { key: 'no_response',  label: '? Sin respuesta', cls: 'action-btn-neutral', status: 'NO_RESPONSE' }
+      ];
+
+      // Acciones completas para dev
+      const devBookingActions = [
+        { key: 'confirmed',    label: 'Confirmada',      cls: 'action-btn-blue',    status: 'CONFIRMED'    },
+        { key: 'attended',     label: '✓ Asistió',      cls: 'action-btn-ok',      status: 'ATTENDED'     },
+        { key: 'no_response',  label: 'No contesta',    cls: 'action-btn-neutral', status: 'NO_RESPONSE'  },
+        { key: 'no_show',      label: '✗ No asistió',  cls: 'action-btn-danger',  status: 'NO_SHOW'      },
+        { key: 'cancelled',    label: 'Canceló',        cls: 'action-btn-neutral', status: 'CANCELLED'    }
+      ];
+
+      const visibleBookingActions = isDevRole ? devBookingActions : recruiterAttendanceActions;
+
+      const canRenderManualSchedulePanel = candidate.vacancy?.schedulingEnabled &&
+        (isDevRole || !(candidate.interviewBookings || []).some(b => ['SCHEDULED','CONFIRMED'].includes(b.status)));
+      const interviewWindowManaged = ['SCHEDULING','SCHEDULED'].includes(candidate.currentStep);
+    %>
+
+    <%- /* Alertas */ %>
+    <% if (cvSuccess) { %><div class="alert alert-success"><%= cvSuccess %></div><% } %>
+    <% if (cvError) { %><div class="alert alert-error"><%= cvError %></div><% } %>
+    <% if (outboundSuccess) { %><div class="alert alert-success"><%= outboundSuccess %></div><% } %>
+    <% if (outboundError) { %><div class="alert alert-error"><%= outboundError %></div><% } %>
+    <% if (role === 'dev' && botPauseSuccess) { %><div class="alert alert-success"><%= botPauseSuccess %></div><% } %>
+    <% if (role === 'dev' && botPauseError) { %><div class="alert alert-error"><%= botPauseError %></div><% } %>
+    <% if (bookingSuccess) { %><div class="alert alert-success"><%= bookingSuccess %></div><% } %>
+    <% if (bookingError) { %><div class="alert alert-error"><%= bookingError %></div><% } %>
+
+    <!-- ══ DATOS DEL CANDIDATO ══ -->
     <div class="card" id="interviews-card">
       <h2>Datos del candidato</h2>
       <div class="info-grid">
@@ -266,7 +461,9 @@
         </div>
         <div class="info-item">
           <label>Documento</label>
-          <span><%= candidate.documentType && candidate.documentNumber ? candidate.documentType + ' ' + candidate.documentNumber : (candidate.documentNumber || '—') %></span>
+          <span><%= candidate.documentType && candidate.documentNumber
+            ? candidate.documentType + ' ' + candidate.documentNumber
+            : (candidate.documentNumber || '—') %></span>
         </div>
         <div class="info-item">
           <label>Edad</label>
@@ -281,7 +478,7 @@
           <span><%= candidate.medicalRestrictions || '—' %></span>
         </div>
         <div class="info-item">
-          <label>Medio de transporte</label>
+          <label>Transporte</label>
           <span><%= candidate.transportMode || '—' %></span>
         </div>
         <div class="info-item" style="grid-column: 1 / -1;">
@@ -295,7 +492,7 @@
         <% if (role === 'dev') { %>
         <div class="info-item">
           <label>Último inbound</label>
-          <span><%= candidate.lastInboundAt ? formatDateTimeCO(candidate.lastInboundAt) : 'Sin mensajes inbound' %></span>
+          <span><%= candidate.lastInboundAt ? formatDateTimeCO(candidate.lastInboundAt) : 'Sin mensajes' %></span>
         </div>
         <% } %>
         <div class="info-item">
@@ -309,22 +506,23 @@
       <% } %>
     </div>
 
+    <!-- ══ ESTADO ══ -->
     <div class="card">
       <h2>Estado del candidato</h2>
       <% if (role === 'dev') { %>
-      <div style="margin-bottom:12px;font-size:14px;">
-        <strong>Bot:</strong>
-        <% if (candidate.botPaused) { %>
-          <span style="color:#b8322b;">Pausado</span>
-          <span>— <%= candidate.botPauseReason || 'Sin motivo registrado' %></span>
-        <% } else { %>
-          <span style="color:#1f7a38;">Activo</span>
-        <% } %>
-      </div>
+        <div style="margin-bottom:10px;font-size:14px;">
+          <strong>Bot:</strong>
+          <% if (candidate.botPaused) { %>
+            <span style="color:#b8322b;">Pausado</span>
+            <span> — <%= candidate.botPauseReason || 'Sin motivo registrado' %></span>
+          <% } else { %>
+            <span style="color:#1f7a38;">Activo</span>
+          <% } %>
+        </div>
       <% } %>
       <% if (role === 'dev' && outboundWindow?.expiringSoon && interviewWindowManaged) { %>
         <div class="alert alert-error" style="background:#fff7ed;border-color:#fdba74;color:#9a3412;">
-          La ventana de 24h está por vencer para este candidato. El sistema intentará enviar un mensaje de continuidad antes del cierre para incentivar respuesta y sostener el contacto.
+          La ventana de 24h está por vencer. El sistema enviará un mensaje de continuidad para sostener el contacto.
         </div>
       <% } %>
       <form method="post" action="/admin/candidates/<%= candidate.id %>/status" class="status-form">
@@ -334,56 +532,57 @@
           <option value="NUEVO" <%= uiStatus === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
           <% } %>
           <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
-          <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
+          <option value="APROBADO"   <%= uiStatus === 'APROBADO'   ? 'selected' : '' %>>Aprobado</option>
           <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
           <option value="CONTRATADO" <%= uiStatus === 'CONTRATADO' ? 'selected' : '' %>>Contratado</option>
-          <option value="RECHAZADO" <%= uiStatus === 'RECHAZADO' ? 'selected' : '' %>>Rechazado</option>
+          <option value="RECHAZADO"  <%= uiStatus === 'RECHAZADO'  ? 'selected' : '' %>>Rechazado</option>
         </select>
         <button type="submit">Guardar</button>
       </form>
       <% if (role === 'dev') { %>
         <% if (!candidate.botPaused) { %>
-          <form method="post" action="/admin/candidates/<%= candidate.id %>/bot-pause" class="status-form" style="margin-top:10px;flex-wrap:wrap;">
-            <input type="text" name="reason" placeholder="Motivo de pausa manual" style="min-width: 280px;padding: 8px 10px;border: 1px solid #ddd;border-radius: 4px;" />
-            <button type="submit" class="btn-danger" style="padding:6px 12px;">Pausar bot</button>
+          <form method="post" action="/admin/candidates/<%= candidate.id %>/bot-pause" class="status-form" style="margin-top:10px;">
+            <input type="text" name="reason" placeholder="Motivo de pausa manual" />
+            <button type="submit" class="btn-danger" style="background:#c0392b;">Pausar bot</button>
           </form>
         <% } else { %>
           <form method="post" action="/admin/candidates/<%= candidate.id %>/bot-resume" class="status-form" style="margin-top:10px;">
-            <button type="submit" class="btn-primary" style="padding:6px 12px;">Reanudar bot</button>
+            <button type="submit" class="btn-primary">Reanudar bot</button>
           </form>
         <% } %>
       <% } %>
     </div>
+
+    <!-- ══ MOVIMIENTOS DEL RECLUTADOR (solo dev) ══ -->
     <% if (role === 'dev') { %>
     <div class="card">
       <h2>Movimientos del reclutador</h2>
       <% if (!adminEvents || adminEvents.length === 0) { %>
-        <p style="color:#64748b;">Aún no hay movimientos manuales registrados para este candidato.</p>
+        <p style="color:#64748b;font-size:14px;">Aún no hay movimientos manuales registrados.</p>
       <% } else { %>
-        <div style="display:grid;gap:10px;">
+        <div style="display:grid;gap:8px;">
           <% for (const event of adminEvents) { %>
-            <% const actorLabel = formatActorRoleLabel(event.actorRole); %>
-            <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;background:#f8fafc;">
-              <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div class="event-item">
+              <div class="event-header">
                 <div>
-                  <div style="font-weight:700;color:#1e293b;"><%= formatAdminEventLabel(event) %></div>
-                  <div style="font-size:13px;color:#64748b;">Por: <%= actorLabel %></div>
+                  <div style="font-weight:700;color:#1e293b;font-size:14px;"><%= formatAdminEventLabel(event) %></div>
+                  <div style="font-size:12px;color:#64748b;">Por: <%= formatActorRoleLabel(event.actorRole) %></div>
                 </div>
-                <div style="font-size:12px;color:#64748b;"><%= formatDateTimeCO(event.createdAt) %></div>
+                <div style="font-size:12px;color:#64748b;white-space:nowrap;"><%= formatDateTimeCO(event.createdAt) %></div>
               </div>
               <% if (event.fromValue || event.toValue) { %>
-                <div style="margin-top:8px;font-size:13px;color:#334155;">
+                <div style="margin-top:6px;font-size:13px;color:#334155;">
                   <% if (event.fromValue && event.toValue) { %>
                     <strong><%= event.fromValue %></strong> → <strong><%= event.toValue %></strong>
                   <% } else if (event.toValue) { %>
                     Valor: <strong><%= event.toValue %></strong>
-                  <% } else if (event.fromValue) { %>
+                  <% } else { %>
                     Valor previo: <strong><%= event.fromValue %></strong>
                   <% } %>
                 </div>
               <% } %>
               <% if (event.note) { %>
-                <div style="margin-top:8px;font-size:13px;color:#475569;"><%= event.note %></div>
+                <div style="margin-top:4px;font-size:13px;color:#475569;"><%= event.note %></div>
               <% } %>
             </div>
           <% } %>
@@ -392,72 +591,67 @@
     </div>
     <% } %>
 
+    <!-- ══ VACANTE (solo dev) ══ -->
     <% if (role === 'dev') { %>
     <div class="card">
       <h2>Vacante asignada</h2>
-      <div class="info-grid" style="margin-bottom: 14px;">
+      <div class="info-grid" style="margin-bottom:14px;">
         <div class="info-item">
           <label>Vacante actual</label>
           <span>
             <% if (candidate.vacancy) { %>
-              <%= candidate.vacancy.title || candidate.vacancy.role %>
-              <% if (candidate.vacancy.city) { %> · <%= candidate.vacancy.city %><% } %>
-            <% } else { %>
-              Sin vacante asignada
-            <% } %>
+              <%= candidate.vacancy.title || candidate.vacancy.role %><% if (candidate.vacancy.city) { %> · <%= candidate.vacancy.city %><% } %>
+            <% } else { %>Sin vacante asignada<% } %>
           </span>
         </div>
         <div class="info-item">
           <label>Estado vacante</label>
           <span>
             <% if (candidate.vacancy) { %>
-              <%= candidate.vacancy.isActive ? 'Activa' : 'Inactiva' %>
-              · <%= candidate.vacancy.acceptingApplications ? 'Recibiendo postulaciones' : 'No recibe postulaciones' %>
-            <% } else { %>
-              —
-            <% } %>
+              <%= candidate.vacancy.isActive ? 'Activa' : 'Inactiva' %> · <%= candidate.vacancy.acceptingApplications ? 'Recibiendo' : 'Sin postulaciones' %>
+            <% } else { %>—<% } %>
           </span>
         </div>
       </div>
-      <form method="post" action="/admin/candidates/<%= candidate.id %>/assign-vacancy" class="status-form" style="flex-wrap: wrap; align-items: flex-end;">
-        <div class="field-group" style="min-width: 320px; flex: 1;">
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/assign-vacancy" class="status-form" style="align-items:flex-end;">
+        <div class="field-group" style="flex:1;">
           <label for="vacancyId">Selecciona una vacante</label>
           <select id="vacancyId" name="vacancyId" required>
             <option value="">Selecciona una vacante</option>
             <% for (const vacancy of availableVacancies || []) { %>
               <option value="<%= vacancy.id %>" <%= candidate.vacancyId === vacancy.id ? 'selected' : '' %>>
-                <%= vacancy.city %> · <%= vacancy.title || vacancy.role %> (<%= vacancy.role %>)
-                <% if (!vacancy.isActive) { %> · Inactiva<% } %>
-                <% if (!vacancy.acceptingApplications) { %> · Sin postulaciones<% } %>
+                <%= vacancy.city %> · <%= vacancy.title || vacancy.role %><% if (!vacancy.isActive) { %> · Inactiva<% } %><% if (!vacancy.acceptingApplications) { %> · Sin postulaciones<% } %>
               </option>
             <% } %>
           </select>
         </div>
-        <button type="submit" class="btn-primary"><%= candidate.vacancyId ? 'Cambiar vacante' : 'Asignar vacante' %></button>
+        <button type="submit" class="btn-primary"><%= candidate.vacancyId ? 'Cambiar' : 'Asignar' %></button>
       </form>
       <% if (candidate.vacancy) { %>
-        <form method="post" action="/admin/candidates/<%= candidate.id %>/send-vacancy-info" class="status-form" style="margin-top:10px;flex-wrap:wrap;">
+        <form method="post" action="/admin/candidates/<%= candidate.id %>/send-vacancy-info" class="status-form" style="margin-top:10px;">
           <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-          <button type="submit" class="btn-primary" <%= outboundWindow && !outboundWindow.isOpen ? 'disabled title="Ventana de 24h cerrada"' : '' %>>Enviar información de la vacante</button>
-          <span style="font-size:12px;color:#64748b;">Usa la información configurada en la vacante asignada.</span>
+          <button type="submit" class="btn-primary" <%= outboundWindow && !outboundWindow.isOpen ? 'disabled title="Ventana 24h cerrada"' : '' %>>Enviar información de la vacante</button>
+          <% if (outboundWindow && !outboundWindow.isOpen) { %>
+            <span style="font-size:12px;color:#b45309;">Ventana 24h cerrada</span>
+          <% } %>
         </form>
-        <% if (outboundWindow && !outboundWindow.isOpen) { %>
-          <div style="font-size:12px;color:#b45309;margin-top:6px;">Ventana de 24h cerrada</div>
-        <% } %>
       <% } %>
     </div>
     <% } %>
 
+    <!-- ══ ENTREVISTAS ══ -->
     <div class="card">
       <h2>Entrevistas</h2>
+
+      <%-- Panel de asignación manual --%>
       <% if (canRenderManualSchedulePanel) { %>
         <div class="booking-manual">
-          <div style="font-weight:700;color:#2c3e50;margin-bottom:6px;">Asignar horario manualmente</div>
+          <div style="font-weight:700;color:#2c3e50;margin-bottom:4px;">Asignar horario manualmente</div>
           <div style="font-size:13px;color:#64748b;margin-bottom:10px;">
             <% if (candidate.vacancy?.interviewAddress || candidate.vacancy?.operationAddress) { %>
-              Punto de entrevista: <%= candidate.vacancy.interviewAddress || candidate.vacancy.operationAddress %>
+              Punto: <%= candidate.vacancy.interviewAddress || candidate.vacancy.operationAddress %>
             <% } else { %>
-              Usa uno de los horarios disponibles configurados para esta vacante.
+              Usa un horario disponible configurado para esta vacante.
             <% } %>
           </div>
           <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
@@ -474,85 +668,124 @@
                   <% } %>
                 </select>
               </div>
-              <button type="submit" class="btn-primary">Asignar horario</button>
+              <button type="submit" class="btn-primary" style="margin-top:8px;">Asignar horario</button>
             </form>
           <% } else { %>
-            <p style="font-size:13px;color:#b45309;">No hay horarios disponibles configurados en este momento para esta vacante.</p>
+            <p style="font-size:13px;color:#b45309;">No hay horarios disponibles en este momento.</p>
           <% } %>
         </div>
       <% } else if (candidate.vacancyId && isDevRole) { %>
-        <p style="margin-bottom:12px;color:#64748b;">La vacante asignada a este candidato no tiene agenda automática habilitada.</p>
+        <p style="margin-bottom:12px;color:#64748b;font-size:14px;">La vacante no tiene agenda automática habilitada.</p>
       <% } %>
+
+      <%-- Lista de bookings --%>
       <% if (!candidate.interviewBookings || candidate.interviewBookings.length === 0) { %>
-        <p>Este candidato aún no tiene entrevistas registradas.</p>
+        <p style="font-size:14px;color:#64748b;">Este candidato aún no tiene entrevistas registradas.</p>
       <% } else { %>
         <div class="booking-list">
           <% for (const booking of candidate.interviewBookings) { %>
             <% const bookingUi = bookingStatusLabel[booking.status] || { cls: '', text: booking.status }; %>
+            <%
+              // Determina acción actualmente seleccionada para este booking
+              const currentActionKey = visibleBookingActions.find(a => booking.status === a.status)?.key || null;
+            %>
             <div class="booking-item">
               <div class="booking-head">
-                <div>
+                <div style="flex:1;min-width:0;">
                   <div class="booking-title"><%= booking.vacancy?.title || booking.vacancy?.role || 'Vacante sin nombre' %></div>
                   <div class="booking-meta">
-                    <%= formatDateTimeCO(booking.scheduledAt) %>
-                    <% if (booking.vacancy?.city) { %> · <%= booking.vacancy.city %><% } %>
+                    <%= formatDateTimeCO(booking.scheduledAt) %><% if (booking.vacancy?.city) { %> · <%= booking.vacancy.city %><% } %>
                   </div>
                 </div>
                 <div class="booking-status <%= bookingUi.cls %>"><%= bookingUi.text %></div>
               </div>
-              <div class="booking-actions">
-                <%
-                  // Determina si hay una accion ya seleccionada para este booking
-                  const selectedActionKey = visibleBookingActions.find(a => booking.status === a.status)?.key || null;
-                %>
-                <% for (const action of visibleBookingActions) { %>
-                  <%
-                    const isSelected = booking.status === action.status;
-                    const isDisabledBySelection = selectedActionKey !== null && !isSelected;
-                  %>
-                  <form method="post" action="/admin/interviews/<%= booking.id %>/status">
-                    <input type="hidden" name="action" value="<%= action.key %>" />
-                    <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-                    <button
-                      type="submit"
-                      class="action-btn <%= action.cls %> booking-action-btn"
-                      data-booking-id="<%= booking.id %>"
-                      data-action-key="<%= action.key %>"
-                      <%= isSelected ? 'data-selected="true"' : '' %>
-                      <%= isDisabledBySelection ? 'disabled' : '' %>
-                    ><%= action.label %></button>
-                  </form>
-                <% } %>
-                <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
-                  <details class="booking-reschedule">
-                    <summary class="action-btn action-btn-warn">Reagendó</summary>
-                    <div class="booking-reschedule-panel">
-                      <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
-                        <form method="post" action="/admin/candidates/<%= candidate.id %>/interview-assign" class="booking-reschedule-form">
-                          <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-                          <div class="field-group">
-                            <label for="slotOption-<%= booking.id %>">Nueva fecha y hora de entrevista</label>
-                            <select id="slotOption-<%= booking.id %>" name="slotOption" required>
-                              <option value="">Selecciona un nuevo horario</option>
-                              <% for (const option of availableInterviewSlots) { %>
-                                <option value="<%= option.slot.id %>|<%= option.date.toISOString() %>"><%= option.formattedDate %></option>
-                              <% } %>
-                            </select>
-                          </div>
-                          <button type="submit" class="action-btn action-btn-warn">Confirmar reagendamiento</button>
-                        </form>
-                      <% } else { %>
-                        <div class="booking-reschedule-note">No hay horarios disponibles esta semana. Se deberá contactar al candidato para concretar un nuevo horario.</div>
-                      <% } %>
-                    </div>
-                  </details>
-                <% } %>
-                <% if (isDevRole) { %>
-                  <form method="post" action="/admin/interviews/<%= booking.id %>/delete" onsubmit="return confirm('¿Seguro que deseas eliminar este agendamiento? Esta acción no se puede deshacer.');">
-                    <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
-                    <button type="submit" class="action-btn action-btn-danger">Eliminar agendamiento</button>
-                  </form>
-                <% } %>
+
+              <%--
+                MOMENTOS DEL PROCESO:
+                1. Confirmación (por el candidato vía bot, estado CONFIRMED)
+                2. Asistencia (por el reclutador, estado ATTENDED / NO_SHOW / NO_RESPONSE)
+              --%>
+              <div class="booking-moments">
+                <div class="moment-row">
+                  <span class="moment-label">Confirmó cita:</span>
+                  <% if (['CONFIRMED','ATTENDED','NO_SHOW','NO_RESPONSE'].includes(booking.status) || booking.reminderResponse === 'CONFIRMED') { %>
+                    <span class="moment-value moment-confirmed">Sí (candidato confirmó)</span>
+                  <% } else { %>
+                    <span class="moment-value moment-pending">Pendiente</span>
+                  <% } %>
+                </div>
+                <div class="moment-row">
+                  <span class="moment-label">Asistencia:</span>
+                  <% if (booking.status === 'ATTENDED') { %>
+                    <span class="moment-value moment-attended">Asistió ✓</span>
+                  <% } else if (booking.status === 'NO_SHOW') { %>
+                    <span class="moment-value moment-no_show">No asistió ✗</span>
+                  <% } else if (booking.status === 'NO_RESPONSE') { %>
+                    <span class="moment-value moment-no_response">Sin respuesta</span>
+                  <% } else { %>
+                    <span class="moment-value moment-pending">Por registrar</span>
+                  <% } %>
+                </div>
+              </div>
+
+              <%-- Sección de acciones del reclutador --%>
+              <div class="booking-section">
+                <div class="booking-section-label">Registrar asistencia</div>
+                <div class="booking-actions">
+                  <% for (const action of visibleBookingActions) { %>
+                    <%
+                      const isSelected = booking.status === action.status;
+                      const isDisabledByOther = currentActionKey !== null && !isSelected;
+                    %>
+                    <form method="post" action="/admin/interviews/<%= booking.id %>/status">
+                      <input type="hidden" name="action" value="<%= action.key %>" />
+                      <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
+                      <button
+                        type="submit"
+                        class="action-btn <%= action.cls %> booking-action-btn"
+                        data-booking-id="<%= booking.id %>"
+                        data-action-key="<%= action.key %>"
+                        <%= isSelected ? 'data-selected="true"' : '' %>
+                        <%= isDisabledByOther ? 'disabled' : '' %>
+                      ><%= action.label %></button>
+                    </form>
+                  <% } %>
+
+                  <%-- Reagendamiento (reclutador) --%>
+                  <% if (!isDevRole && candidate.vacancy?.schedulingEnabled) { %>
+                    <details class="booking-reschedule">
+                      <summary class="action-btn action-btn-warn">Reagendó</summary>
+                      <div class="booking-reschedule-panel">
+                        <% if (availableInterviewSlots && availableInterviewSlots.length) { %>
+                          <form method="post" action="/admin/candidates/<%= candidate.id %>/interview-assign" class="booking-reschedule-form">
+                            <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
+                            <div class="field-group">
+                              <label for="slotOption-<%= booking.id %>">Nueva fecha y hora</label>
+                              <select id="slotOption-<%= booking.id %>" name="slotOption" required>
+                                <option value="">Selecciona un nuevo horario</option>
+                                <% for (const option of availableInterviewSlots) { %>
+                                  <option value="<%= option.slot.id %>|<%= option.date.toISOString() %>"><%= option.formattedDate %></option>
+                                <% } %>
+                              </select>
+                            </div>
+                            <button type="submit" class="action-btn action-btn-warn">Confirmar reagendamiento</button>
+                          </form>
+                        <% } else { %>
+                          <div class="booking-reschedule-note">No hay horarios disponibles esta semana.</div>
+                        <% } %>
+                      </div>
+                    </details>
+                  <% } %>
+
+                  <%-- Eliminar agendamiento (solo dev) --%>
+                  <% if (isDevRole) { %>
+                    <form method="post" action="/admin/interviews/<%= booking.id %>/delete"
+                      onsubmit="return confirm('¿Eliminar este agendamiento? No se puede deshacer.');">
+                      <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
+                      <button type="submit" class="action-btn action-btn-danger">Eliminar</button>
+                    </form>
+                  <% } %>
+                </div>
               </div>
             </div>
           <% } %>
@@ -560,32 +793,33 @@
       <% } %>
     </div>
 
+    <!-- ══ HOJA DE VIDA ══ -->
     <div class="card">
       <h2>Hoja de vida</h2>
       <% if (role === 'dev') { %>
-        <div class="info-grid" style="margin-bottom: 10px;">
+        <div class="info-grid" style="margin-bottom:10px;">
           <div class="info-item">
-            <label>Diagnóstico HV (nombre)</label>
+            <label>Nombre archivo</label>
             <span><%= candidate.cvOriginalName || '—' %></span>
           </div>
           <div class="info-item">
-            <label>Diagnóstico HV (MIME)</label>
+            <label>MIME</label>
             <span><%= candidate.cvMimeType || '—' %></span>
           </div>
           <div class="info-item">
-            <label>Diagnóstico HV (bytes)</label>
+            <label>Tamaño (bytes)</label>
             <span><%= cvSizeBytes || 0 %></span>
           </div>
         </div>
       <% } %>
       <% if (!candidate.hasCv) { %>
-        <p style="margin-bottom:10px;"><%= role === 'dev' ? 'Este candidato no tiene hoja de vida cargada.' : 'Aún no hay una hoja de vida cargada para este candidato.' %></p>
+        <p style="margin-bottom:10px;font-size:14px;">Aún no hay hoja de vida cargada.</p>
         <form method="post" action="/admin/candidates/<%= candidate.id %>/cv/upload" enctype="multipart/form-data" class="inline-upload">
           <input type="file" name="cvFile" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
-          <button type="submit" class="btn-primary"><%= role === 'dev' ? 'Subir hoja de vida' : 'Cargar hoja de vida' %></button>
+          <button type="submit" class="btn-primary">Cargar hoja de vida</button>
         </form>
       <% } else { %>
-        <div class="info-item">
+        <div class="info-item" style="margin-bottom:10px;">
           <label>Archivo actual</label>
           <span><%= candidate.cvOriginalName || 'hoja_de_vida' %></span>
         </div>
@@ -602,59 +836,63 @@
       <% } %>
     </div>
 
+    <!-- ══ MENSAJES SALIENTES (solo dev) ══ -->
     <% if (role === 'dev') { %>
-      <div class="card">
-        <h2>Mensajes salientes (solo desarrollo)</h2>
-        <% if (outboundWindow) { %>
-          <div class="info-grid" style="margin-bottom: 14px;">
-            <div class="info-item">
-              <label>Último mensaje del candidato</label>
-              <span><%= outboundWindow.lastInboundAt ? formatDateTimeCO(outboundWindow.lastInboundAt) : 'Sin mensajes inbound' %></span>
-            </div>
-            <div class="info-item">
-              <label>Estado ventana WhatsApp (24h)</label>
-              <span><%= outboundWindow.isOpen ? 'Abierta' : 'Vencida' %></span>
-            </div>
-            <div class="info-item">
-              <label>Vence la ventana</label>
-              <span><%= outboundWindow.expiresAt ? formatDateTimeCO(outboundWindow.expiresAt) : 'Sin referencia' %></span>
-            </div>
+    <div class="card">
+      <h2>Mensajes salientes (solo desarrollo)</h2>
+      <% if (outboundWindow) { %>
+        <div class="info-grid" style="margin-bottom:14px;">
+          <div class="info-item">
+            <label>Último inbound</label>
+            <span><%= outboundWindow.lastInboundAt ? formatDateTimeCO(outboundWindow.lastInboundAt) : 'Sin mensajes' %></span>
           </div>
-        <% } %>
-        <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
-          <input type="hidden" name="action" value="request_missing_data" />
-          <button type="submit">Solicitar datos pendientes</button>
-        </form>
-        <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
-          <input type="hidden" name="action" value="request_hv" />
-          <button type="submit" <%= outboundWindow && !outboundWindow.isOpen ? 'disabled title="Ventana de 24h cerrada"' : '' %>>Solicitar Hoja de vida</button>
-        </form>
+          <div class="info-item">
+            <label>Ventana 24h</label>
+            <span><%= outboundWindow.isOpen ? 'Abierta' : 'Vencida' %></span>
+          </div>
+          <div class="info-item">
+            <label>Vence</label>
+            <span><%= outboundWindow.expiresAt ? formatDateTimeCO(outboundWindow.expiresAt) : 'Sin referencia' %></span>
+          </div>
+        </div>
+      <% } %>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form">
+        <input type="hidden" name="action" value="request_missing_data" />
+        <button type="submit">Solicitar datos pendientes</button>
+      </form>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="margin-top:6px;">
+        <input type="hidden" name="action" value="request_hv" />
+        <button type="submit" <%= outboundWindow && !outboundWindow.isOpen ? 'disabled title="Ventana 24h cerrada"' : '' %>>Solicitar Hoja de vida</button>
         <% if (outboundWindow && !outboundWindow.isOpen) { %>
-          <div style="font-size:12px;color:#b45309;margin-top:6px;">Ventana de 24h cerrada</div>
+          <span style="font-size:12px;color:#b45309;">Ventana cerrada</span>
         <% } %>
-        <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
-          <input type="hidden" name="action" value="reminder" />
-          <button type="submit">Enviar recordatorio</button>
-        </form>
-        <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="flex-wrap: wrap;">
-          <input type="hidden" name="action" value="free_text" />
-          <input type="text" name="customBody" placeholder="Mensaje libre" style="min-width: 320px;padding: 8px 10px;border: 1px solid #ddd;border-radius: 4px;" required />
-          <button type="submit">Enviar mensaje libre</button>
-        </form>
-      </div>
+      </form>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="margin-top:6px;">
+        <input type="hidden" name="action" value="reminder" />
+        <button type="submit">Enviar recordatorio</button>
+      </form>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="margin-top:6px;">
+        <input type="hidden" name="action" value="free_text" />
+        <input type="text" name="customBody" placeholder="Mensaje libre" required />
+        <button type="submit">Enviar</button>
+      </form>
+    </div>
     <% } %>
 
+    <!-- ══ HERRAMIENTAS DEV ══ -->
     <% if (role === 'dev') { %>
     <div class="card">
       <h2>Herramientas de desarrollo</h2>
-      <p style="margin-bottom:12px;color:#64748b;">Estas acciones son solo para limpieza manual y no están disponibles para reclutador.</p>
-      <form method="post" action="/admin/candidates/<%= candidate.id %>/delete" onsubmit="return confirm('¿Seguro que deseas eliminar este candidato con sus mensajes y agendamientos? Esta acción no se puede deshacer.');">
+      <p style="margin-bottom:12px;color:#64748b;font-size:14px;">Solo para limpieza manual. No disponibles para reclutador.</p>
+      <form method="post" action="/admin/candidates/<%= candidate.id %>/delete"
+        onsubmit="return confirm('¿Eliminar este candidato con todos sus datos? No se puede deshacer.');">
         <input type="hidden" name="returnTo" value="<%= returnToPath || '/admin' %>" />
         <button type="submit" class="btn-danger">Eliminar registro completo</button>
       </form>
     </div>
     <% } %>
 
+    <!-- ══ EDICIÓN MANUAL ══ -->
     <div class="card">
       <h2>Edición manual de datos</h2>
       <form method="post" action="/admin/candidates/<%= candidate.id %>/edit">
@@ -680,14 +918,14 @@
           <div class="field-group">
             <label for="gender">Género</label>
             <select id="gender" name="gender">
-              <option value="UNKNOWN" <%= candidate.gender === 'UNKNOWN' || !candidate.gender ? 'selected' : '' %>>No definido</option>
+              <option value="UNKNOWN" <%= !candidate.gender || candidate.gender === 'UNKNOWN' ? 'selected' : '' %>>No definido</option>
               <option value="FEMALE" <%= candidate.gender === 'FEMALE' ? 'selected' : '' %>>Mujer</option>
-              <option value="MALE" <%= candidate.gender === 'MALE' ? 'selected' : '' %>>Hombre</option>
-              <option value="OTHER" <%= candidate.gender === 'OTHER' ? 'selected' : '' %>>Otro</option>
+              <option value="MALE"   <%= candidate.gender === 'MALE'   ? 'selected' : '' %>>Hombre</option>
+              <option value="OTHER"  <%= candidate.gender === 'OTHER'  ? 'selected' : '' %>>Otro</option>
             </select>
           </div>
           <div class="field-group field-group-full">
-            <label for="interviewNotes">Observaciones (solo dev)</label>
+            <label for="interviewNotes">Observaciones (dev)</label>
             <textarea id="interviewNotes" name="interviewNotes"><%= candidate.interviewNotes || '' %></textarea>
           </div>
           <% } %>
@@ -710,10 +948,10 @@
               <option value="NUEVO" <%= uiStatus === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
               <% } %>
               <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
-              <option value="APROBADO" <%= uiStatus === 'APROBADO' ? 'selected' : '' %>>Aprobado</option>
+              <option value="APROBADO"   <%= uiStatus === 'APROBADO'   ? 'selected' : '' %>>Aprobado</option>
               <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
               <option value="CONTRATADO" <%= uiStatus === 'CONTRATADO' ? 'selected' : '' %>>Contratado</option>
-              <option value="RECHAZADO" <%= uiStatus === 'RECHAZADO' ? 'selected' : '' %>>Rechazado</option>
+              <option value="RECHAZADO"  <%= uiStatus === 'RECHAZADO'  ? 'selected' : '' %>>Rechazado</option>
             </select>
           </div>
           <div class="field-group">
@@ -732,6 +970,7 @@
       </form>
     </div>
 
+    <!-- ══ HISTORIAL (solo dev) ══ -->
     <% if (role === 'dev') { %>
     <div class="card">
       <h2>Historial de conversación</h2>
@@ -752,28 +991,36 @@
   </div>
 
   <script>
-  // Radio behavior para botones de accion de entrevista
-  // Al seleccionar uno, los demas del mismo booking se deshabilitan
-  // Si el estado viene del servidor (data-selected), los demas ya vienen disabled desde el HTML
-  // Este script maneja clicks del usuario antes de que el form se envie
+  // ── Radio behavior REVERSIBLE para botones de asistencia ──
+  // Permite cambiar la selección: click en uno ya seleccionado lo DESELECCIONA (radio toggle).
+  // Click en uno no seleccionado: lo marca y deshabilita los otros.
   (function () {
-    document.querySelectorAll('.booking-action-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var bookingId = this.dataset.bookingId;
-        var actionKey = this.dataset.actionKey;
-        // Desmarcar todos del mismo booking
-        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+    function applyBookingRadio(bookingId, selectedKey) {
+      document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+        const isCurrent = b.dataset.actionKey === selectedKey;
+        b.disabled = selectedKey !== null && !isCurrent;
+        if (isCurrent) {
+          b.setAttribute('data-selected', 'true');
+        } else {
           b.removeAttribute('data-selected');
-          b.disabled = false;
-        });
-        // Marcar el clickeado
-        this.setAttribute('data-selected', 'true');
-        // Deshabilitar los otros
-        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
-          if (b.dataset.actionKey !== actionKey) {
-            b.disabled = true;
-          }
-        });
+        }
+      });
+    }
+
+    document.querySelectorAll('.booking-action-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        var bookingId  = this.dataset.bookingId;
+        var actionKey  = this.dataset.actionKey;
+        var wasSelected = this.getAttribute('data-selected') === 'true';
+
+        if (wasSelected) {
+          // Toggle: desmarcar → todos habilitados
+          e.preventDefault();
+          applyBookingRadio(bookingId, null);
+        } else {
+          // Marcar este, deshabilitar el resto (el form se enviará normalmente)
+          applyBookingRadio(bookingId, actionKey);
+        }
       });
     });
   })();

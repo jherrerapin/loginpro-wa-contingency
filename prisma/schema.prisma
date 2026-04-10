@@ -80,6 +80,7 @@ enum ExperienceRequirement {
 enum BookingStatus {
   SCHEDULED
   CONFIRMED
+  ATTENDED
   RESCHEDULED
   NO_RESPONSE
   NO_SHOW
