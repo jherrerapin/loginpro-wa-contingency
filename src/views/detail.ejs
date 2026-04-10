@@ -245,7 +245,7 @@
     .action-btn-neutral { border-color: #cbd5e1; background: #eef2f7; color: #475569; }
     .action-btn-blue    { border-color: #93c5fd; background: #dbeafe; color: #1d4ed8; }
     /* Estado seleccionado */
-    .action-btn[data-selected="true"] {
+    .action-btn[data-selected='true'] {
       box-shadow: 0 0 0 2.5px currentColor;
       font-weight: 900;
     }
@@ -641,7 +641,7 @@
     <div class="card">
       <h2>Entrevistas</h2>
 
-      <%-- Panel de asignación manual --%>
+      <%- /* Panel de asignación manual */ %>
       <% if (canRenderManualSchedulePanel) { %>
         <div class="booking-manual">
           <div style="font-weight:700;color:#2c3e50;margin-bottom:4px;">Asignar horario manualmente</div>
@@ -676,7 +676,7 @@
         <p style="margin-bottom:12px;color:#64748b;font-size:14px;">La vacante no tiene agenda automática habilitada.</p>
       <% } %>
 
-      <%-- Lista de bookings --%>
+      <%- /* Lista de bookings */ %>
       <% if (!candidate.interviewBookings || candidate.interviewBookings.length === 0) { %>
         <p style="font-size:14px;color:#64748b;">Este candidato aún no tiene entrevistas registradas.</p>
       <% } else { %>
@@ -684,8 +684,8 @@
           <% for (const booking of candidate.interviewBookings) { %>
             <% const bookingUi = bookingStatusLabel[booking.status] || { cls: '', text: booking.status }; %>
             <%
-              // Determina acción actualmente seleccionada para este booking
-              const currentActionKey = visibleBookingActions.find(a => booking.status === a.status) ? visibleBookingActions.find(a => booking.status === a.status).key : null;
+              // Determina si hay una acción seleccionada para este booking (estado actual coincide con alguna acción visible)
+              const selectedAction = visibleBookingActions.find(a => booking.status === a.status) || null;
             %>
             <div class="booking-item">
               <div class="booking-head">
@@ -726,15 +726,13 @@
                 </div>
               </div>
 
-              <%-- Sección de acciones del reclutador --%>
+              <%- /* Sección de acciones del reclutador */ %>
               <div class="booking-section">
                 <div class="booking-section-label">Registrar asistencia</div>
-                <div class="booking-actions">
+                <div class="booking-actions" data-booking-group="<%= booking.id %>">
                   <% for (const action of visibleBookingActions) { %>
-                    <%
-                      const isSelected = booking.status === action.status;
-                      const isDisabledByOther = currentActionKey !== null && !isSelected;
-                    %>
+                    <% var isSelected = (selectedAction !== null && selectedAction.key === action.key); %>
+                    <% var isDisabled = (selectedAction !== null && !isSelected); %>
                     <form method="post" action="/admin/interviews/<%= booking.id %>/status">
                       <input type="hidden" name="action" value="<%= action.key %>" />
                       <input type="hidden" name="returnTo" value="<%= detailReturnTo %>" />
@@ -743,13 +741,13 @@
                         class="action-btn <%= action.cls %> booking-action-btn"
                         data-booking-id="<%= booking.id %>"
                         data-action-key="<%= action.key %>"
-                        <%= isSelected ? 'data-selected="true"' : '' %>
-                        <%= isDisabledByOther ? 'disabled' : '' %>
+                        <% if (isSelected) { %>data-selected='true'<% } %>
+                        <% if (isDisabled) { %>disabled<% } %>
                       ><%= action.label %></button>
                     </form>
                   <% } %>
 
-                  <%-- Reagendamiento (reclutador) --%>
+                  <%- /* Reagendamiento (reclutador) */ %>
                   <% if (!isDevRole && candidate.vacancy && candidate.vacancy.schedulingEnabled) { %>
                     <details class="booking-reschedule">
                       <summary class="action-btn action-btn-warn">Reagendó</summary>
@@ -775,7 +773,7 @@
                     </details>
                   <% } %>
 
-                  <%-- Eliminar agendamiento (solo dev) --%>
+                  <%- /* Eliminar agendamiento (solo dev) */ %>
                   <% if (isDevRole) { %>
                     <form method="post" action="/admin/interviews/<%= booking.id %>/delete"
                       onsubmit="return confirm('¿Eliminar este agendamiento? No se puede deshacer.');">
@@ -866,171 +864,58 @@
         <% } %>
       </form>
       <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="margin-top:6px;">
-        <input type="hidden" name="action" value="reminder" />
-        <button type="submit">Enviar recordatorio</button>
-      </form>
-      <form method="post" action="/admin/candidates/<%= candidate.id %>/outbound" class="status-form" style="margin-top:6px;">
-        <input type="hidden" name="action" value="free_text" />
-        <input type="text" name="customBody" placeholder="Mensaje libre" required />
-        <button type="submit">Enviar</button>
+        <input type="hidden" name="action" value="send_interview_confirmation" />
+        <button type="submit" <%= outboundWindow && !outboundWindow.isOpen ? 'disabled title="Ventana 24h cerrada"' : '' %>>Enviar confirmación de entrevista</button>
+        <% if (outboundWindow && !outboundWindow.isOpen) { %>
+          <span style="font-size:12px;color:#b45309;">Ventana cerrada</span>
+        <% } %>
       </form>
     </div>
     <% } %>
 
-    <!-- ══ HERRAMIENTAS DEV ══ -->
-    <% if (role === 'dev') { %>
+    <!-- ══ HISTORIAL DE MENSAJES ══ -->
     <div class="card">
-      <h2>Herramientas de desarrollo</h2>
-      <p style="margin-bottom:12px;color:#64748b;font-size:14px;">Solo para limpieza manual. No disponibles para reclutador.</p>
-      <form method="post" action="/admin/candidates/<%= candidate.id %>/delete"
-        onsubmit="return confirm('¿Eliminar este candidato con todos sus datos? No se puede deshacer.');">
-        <input type="hidden" name="returnTo" value="<%= returnToPath || '/admin' %>" />
-        <button type="submit" class="btn-danger">Eliminar registro completo</button>
-      </form>
-    </div>
-    <% } %>
-
-    <!-- ══ EDICIÓN MANUAL ══ -->
-    <div class="card">
-      <h2>Edición manual de datos</h2>
-      <form method="post" action="/admin/candidates/<%= candidate.id %>/edit">
-        <input type="hidden" name="returnTo" value="<%= returnToPath || '/admin' %>" />
-        <div class="edit-form">
-          <div class="field-group">
-            <label for="fullName">Nombre completo</label>
-            <input id="fullName" name="fullName" type="text" value="<%= candidate.fullName || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="documentType">Tipo de documento</label>
-            <input id="documentType" name="documentType" type="text" value="<%= candidate.documentType || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="documentNumber">Número de documento</label>
-            <input id="documentNumber" name="documentNumber" type="text" value="<%= candidate.documentNumber || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="age">Edad</label>
-            <input id="age" name="age" type="number" min="0" value="<%= candidate.age != null ? candidate.age : '' %>" />
-          </div>
-          <% if (role === 'dev') { %>
-          <div class="field-group">
-            <label for="gender">Género</label>
-            <select id="gender" name="gender">
-              <option value="UNKNOWN" <%= !candidate.gender || candidate.gender === 'UNKNOWN' ? 'selected' : '' %>>No definido</option>
-              <option value="FEMALE" <%= candidate.gender === 'FEMALE' ? 'selected' : '' %>>Mujer</option>
-              <option value="MALE"   <%= candidate.gender === 'MALE'   ? 'selected' : '' %>>Hombre</option>
-              <option value="OTHER"  <%= candidate.gender === 'OTHER'  ? 'selected' : '' %>>Otro</option>
-            </select>
-          </div>
-          <div class="field-group field-group-full">
-            <label for="interviewNotes">Observaciones (dev)</label>
-            <textarea id="interviewNotes" name="interviewNotes"><%= candidate.interviewNotes || '' %></textarea>
-          </div>
-          <% } %>
-          <div class="field-group">
-            <label for="residenceArea"><%= residenceLabel %></label>
-            <input id="residenceArea" name="residenceArea" type="text" value="<%= residenceValue || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="medicalRestrictions">Restricciones médicas</label>
-            <input id="medicalRestrictions" name="medicalRestrictions" type="text" value="<%= candidate.medicalRestrictions || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="transportMode">Medio de transporte</label>
-            <input id="transportMode" name="transportMode" type="text" value="<%= candidate.transportMode || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="statusEdit">Estado</label>
-            <select id="statusEdit" name="status">
-              <% if (role === 'dev') { %>
-              <option value="NUEVO" <%= uiStatus === 'NUEVO' ? 'selected' : '' %>>Nuevo</option>
-              <% } %>
-              <option value="REGISTRADO" <%= uiStatus === 'REGISTRADO' ? 'selected' : '' %>>Registrado</option>
-              <option value="APROBADO"   <%= uiStatus === 'APROBADO'   ? 'selected' : '' %>>Aprobado</option>
-              <option value="CONTACTADO" <%= uiStatus === 'CONTACTADO' ? 'selected' : '' %>>Contactado</option>
-              <option value="CONTRATADO" <%= uiStatus === 'CONTRATADO' ? 'selected' : '' %>>Contratado</option>
-              <option value="RECHAZADO"  <%= uiStatus === 'RECHAZADO'  ? 'selected' : '' %>>Rechazado</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="rejectionReason">Motivo de rechazo</label>
-            <input id="rejectionReason" name="rejectionReason" type="text" value="<%= candidate.rejectionReason || '' %>" />
-          </div>
-          <div class="field-group">
-            <label for="rejectionDetails">Detalle de rechazo</label>
-            <input id="rejectionDetails" name="rejectionDetails" type="text" value="<%= candidate.rejectionDetails || '' %>" />
-          </div>
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="btn-primary">Guardar cambios</button>
-          <a href="/admin/candidates/<%= candidate.id %>" class="btn-secondary">Cancelar</a>
-        </div>
-      </form>
-    </div>
-
-    <!-- ══ HISTORIAL (solo dev) ══ -->
-    <% if (role === 'dev') { %>
-    <div class="card">
-      <h2>Historial de conversación</h2>
-      <div class="messages-list">
-        <% if (candidate.messages && candidate.messages.length) { %>
-          <% const sorted = candidate.messages.slice().sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); %>
-          <% for (const m of sorted) { %>
-            <% const isBot = m.direction === 'OUTBOUND'; %>
-            <div class="msg <%= isBot ? 'msg-bot' : 'msg-candidato' %>">
+      <h2>Historial de mensajes</h2>
+      <% if (!messages || messages.length === 0) { %>
+        <p style="font-size:14px;color:#64748b;">Sin mensajes registrados.</p>
+      <% } else { %>
+        <div class="messages-list">
+          <% for (const msg of messages) { %>
+            <div class="msg <%= msg.direction === 'inbound' ? 'msg-candidato' : 'msg-bot' %>">
               <div class="msg-header">
-                <strong><%= isBot ? 'Bot' : 'Candidato' %></strong> &middot; <%= formatDateTimeCO(m.createdAt) %>
+                <%= msg.direction === 'inbound' ? 'Candidato' : 'Bot' %> · <%= formatDateTimeCO(msg.createdAt) %>
               </div>
-              <div class="msg-body"><%= m.body || '(archivo adjunto)' %></div>
+              <div class="msg-body"><%= msg.body %></div>
             </div>
           <% } %>
-        <% } else { %>
-          <p style="color:#64748b;font-size:14px;">No hay mensajes registrados.</p>
-        <% } %>
-      </div>
+        </div>
+      <% } %>
     </div>
-    <% } %>
-  </div>
+
+  </div><!-- /container -->
 
   <script>
-  // ── Radio behavior REVERSIBLE para botones de asistencia ──
-  // Permite cambiar la selección: click en uno ya seleccionado lo DESELECCIONA (radio toggle).
-  // Click en uno no seleccionado: lo marca y deshabilita los otros.
   (function () {
-    function applyBookingRadio(bookingId, selectedKey) {
-      document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
-        var isCurrent = b.dataset.actionKey === selectedKey;
-        b.disabled = selectedKey !== null && !isCurrent;
-        if (isCurrent) {
-          b.setAttribute('data-selected', 'true');
-        } else {
-          b.removeAttribute('data-selected');
-        }
-      });
-    }
-
+    // Radio behavior para botones de acción de booking
+    // Al hacer click, solo ese queda activo y los demás se deshabilitan
     document.querySelectorAll('.booking-action-btn').forEach(function (btn) {
-      // Aplicar estado inicial desde servidor
-      if (btn.getAttribute('data-selected') === 'true') {
-        var bookingId = btn.dataset.bookingId;
-        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
-          if (b !== btn) b.disabled = true;
-        });
-      }
-
       btn.addEventListener('click', function (e) {
-        var bookingId  = this.dataset.bookingId;
-        var actionKey  = this.dataset.actionKey;
-        var wasSelected = this.getAttribute('data-selected') === 'true';
+        var bookingId = this.dataset.bookingId;
+        var actionKey = this.dataset.actionKey;
 
-        if (wasSelected) {
-          // Toggle: desmarcar → todos habilitados
-          e.preventDefault();
-          applyBookingRadio(bookingId, null);
-        } else {
-          // Marcar este, deshabilitar el resto (el form se enviará normalmente)
-          applyBookingRadio(bookingId, actionKey);
-        }
+        // Quitar selección y habilitar todos los del mismo booking
+        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+          b.removeAttribute('data-selected');
+          b.disabled = false;
+        });
+
+        // Marcar el clickeado y deshabilitar los demás
+        this.setAttribute('data-selected', 'true');
+        document.querySelectorAll('.booking-action-btn[data-booking-id="' + bookingId + '"]').forEach(function (b) {
+          if (b.dataset.actionKey !== actionKey) {
+            b.disabled = true;
+          }
+        });
       });
     });
   })();
