@@ -216,7 +216,7 @@ test('dashboard severe regression: la alerta manual solo muestra chats no revisa
 
     assert.equal(response.status, 200);
     assert.match(html, /Hay 1 chat/);
-    assert.match(html, /Atencion manual pendiente[\s\S]*\(1\)/);
+    assert.match(html, /Atención manual pendiente[\s\S]*\(1\)/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

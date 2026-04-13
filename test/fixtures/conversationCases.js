@@ -300,7 +300,7 @@ export const conversationCases = [
         fullName: 'Si Claro'
       },
       lastReplyIncludes: ['hoja de vida'],
-      lastReplyNotIncludes: ['todavia necesito: medio de transporte', 'medio de transporte: pendiente']
+      lastReplyNotIncludes: ['todavía necesito: medio de transporte', 'medio de transporte: pendiente']
     }
   },
   {

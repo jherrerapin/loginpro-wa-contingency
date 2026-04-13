@@ -1424,7 +1424,7 @@
                     <% } %>
                     <% if (c.isFemaleHumanReview) { %>
                       <div class="candidate-flags">
-                        <span class="badge badge-human-review">Revision humana</span>
+                        <span class="badge badge-human-review">Revisión humana</span>
                       </div>
                     <% } %>
                     <% if (role === 'dev' && c.hasNewInbound) { %>
@@ -1432,7 +1432,7 @@
                         <span class="badge badge-unread">Mensaje nuevo</span>
                       </div>
                     <% } %>
-                    <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '-' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> anios<% } %></div>
+                    <div class="candidate-doc"><%= c.documentType && c.documentNumber ? c.documentType + ' ' + c.documentNumber : '-' %><% if (c.age) { %>&nbsp;&middot;&nbsp;<%= c.age %> años<% } %></div>
                     <% const approvedCandidateMeta = candidateOperationalMeta(c, { residenceContext: v }); %>
                     <% if (approvedCandidateMeta) { %><div class="candidate-extra"><%= approvedCandidateMeta %></div><% } %>
                     <% const approvedCandidateNote = candidateObservationSnippet(c); %>
@@ -1448,7 +1448,7 @@
                   </div>
                 </div>
               <% } %>
-              <% if (filteredApprovedCandidates.length > 25) { %><div style="text-align:center;padding:8px;font-size:12px;color:var(--text-muted);">+ <%= filteredApprovedCandidates.length - 25 %> mas aprobados</div><% } %>
+              <% if (filteredApprovedCandidates.length > 25) { %><div style="text-align:center;padding:8px;font-size:12px;color:var(--text-muted);">+ <%= filteredApprovedCandidates.length - 25 %> más aprobados</div><% } %>
             </div>
           </div>
           <% } %>
@@ -1530,11 +1530,11 @@
   <% if (role === 'dev' && manualReviewCandidates && manualReviewCandidates.length > 0) { %>
   <div class="legacy-section" style="margin-top:24px;">
     <div class="legacy-header">
-      <h3>Atencion manual pendiente <span style="font-weight:400;color:var(--text-muted);font-size:13px;">(<%= manualReviewCandidates.length %>)</span></h3>
+      <h3>Atención manual pendiente <span style="font-weight:400;color:var(--text-muted);font-size:13px;">(<%= manualReviewCandidates.length %>)</span></h3>
       <span style="font-size:12px;color:var(--text-muted);">Chats que requieren seguimiento humano</span>
     </div>
     <table class="legacy-table">
-      <thead><tr><th>Actividad</th><th>Nombre</th><th>Motivo</th><th>Telefono</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Actividad</th><th>Nombre</th><th>Motivo</th><th>Teléfono</th><th>Estado</th><th></th></tr></thead>
       <tbody>
         <% for (const c of manualReviewCandidates.slice(0, 12)) { %>
           <% const uiSt = normalizeCandidateStatusForUI(c.status); %>
@@ -1547,7 +1547,7 @@
                 <div class="candidate-dev-meta"><%= candidateLastMessageLabel(c) %></div>
               <% } %>
             </td>
-            <td style="font-size:12px;color:var(--text-muted);"><%= c.botPauseReason || 'Revision manual solicitada' %></td>
+            <td style="font-size:12px;color:var(--text-muted);"><%= c.botPauseReason || 'Revisión manual solicitada' %></td>
             <td><a href="<%= candidateWhatsappHref(c) %>" style="color:#25d366;font-weight:600;"><%= formatCandidatePhone(c.phone) %></a></td>
             <td><span class="badge <%= (stBadge[uiSt]||{cls:'badge-nuevo'}).cls %>"><%= (stBadge[uiSt]||{label:uiSt}).label %></span></td>
             <td><a href="<%= candidateDetailHref(c) %>" class="link-detail">Ver chat -></a></td>

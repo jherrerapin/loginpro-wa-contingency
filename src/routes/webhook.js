@@ -186,7 +186,7 @@ function formatYearsLabel(age) {
 function isMedicalRestrictionsClarificationRequest(text = '') {
   const n = normalizeComparableText(text);
   if (!n) return false;
-  return /\b(no entiendo|no se|no s[eÃ©]|que tendria que poner|que debo poner|a que te refieres|que significa)\b/.test(n)
+  return /\b(no entiendo|no se|no s[eé]|que tendria que poner|que debo poner|a que te refieres|que significa)\b/.test(n)
     && /\b(?:restric\w*|medic\w*|salud)\b/.test(n);
 }
 function buildMedicalRestrictionsClarifier() {
@@ -208,7 +208,7 @@ function enrichNormalizedDataFromContext(text = '', normalizedData = {}, candida
 
   if (!enriched.medicalRestrictions && missingSet.size === 1 && missingSet.has('restricciones medicas')) {
     if (looksLikeNoMedicalRestrictionsText(text, { allowImplicit: true })) {
-      enriched.medicalRestrictions = 'Sin restricciones mÃ©dicas';
+      enriched.medicalRestrictions = 'Sin restricciones médicas';
     }
   }
 
@@ -238,7 +238,7 @@ function buildUpdatedConfirmationReply(candidate, updatedFields = [], vacancy = 
 function buildConfirmationClarifier(candidate, vacancy = null) {
   const missing = getMissingFields(candidate, vacancy);
   if (missing.length) {
-    return `Si ves algo por ajustar, enviame solo el dato correcto. Para seguir todavia necesito: ${missing.join(', ')}.`;
+    return `Si ves algo por ajustar, enviame solo el dato correcto. Para seguir todavía necesito: ${missing.join(', ')}.`;
   }
   return 'Si todo esta correcto, responde si y seguimos. Si quieres ajustar algo, enviame solo ese dato y lo actualizo.';
 }
