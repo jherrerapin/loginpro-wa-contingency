@@ -1,4 +1,4 @@
-# Loginpro WhatsApp Contingency
+# Lorren Whatsapp Reclutamiento Loginpro
 
 ## Objetivo
 Chatbot de reclutamiento por WhatsApp para captar candidatos de pautas publicadas en Meta (Facebook, Instagram). Captura datos del candidato de forma conversacional y natural, y los muestra en un panel administrativo para el equipo de reclutamiento.
