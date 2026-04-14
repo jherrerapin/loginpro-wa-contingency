@@ -849,12 +849,29 @@ async function sendAdminOutboundMessage(prisma, candidate, body, rawPayload = {}
 }
 
 function buildManualInterviewReminderText(booking) {
+  const fullName = normalizeString(booking?.candidate?.fullName);
+  const firstName = fullName ? fullName.split(/\s+/)[0] : null;
+  const greeting = firstName ? `Hola, ${firstName},` : 'Hola,';
   const scheduledAt = booking?.scheduledAt ? new Date(booking.scheduledAt) : null;
-  const formattedDate = scheduledAt ? formatInterviewDate(scheduledAt) : null;
-  if (!formattedDate) {
-    return 'Te envio este recordatorio manual de entrevista por si no te llego el automatico. Si necesitas ajustar algo, respondeme por este medio.';
+
+  if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+    return `${greeting} Te escribo para recordarte tu entrevista. Por favor respóndeme con una de estas opciones: confirmo, cancelar o reprogramar.`;
   }
-  return `Te envio este recordatorio manual de tu entrevista para ${formattedDate}, idealmente una hora antes. Si necesitas ajustar algo, respondeme por este medio.`;
+
+  const interviewDay = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(scheduledAt);
+
+  const today = todayCO();
+  const timeOnly = formatTimeCO(scheduledAt);
+  const when = interviewDay === today
+    ? `hoy a las ${timeOnly}`
+    : formatInterviewDate(scheduledAt);
+
+  return `${greeting} Tu entrevista está programada para ${when}. Por favor respóndeme con una de estas opciones: confirmo, cancelar o reprogramar.`;
 }
 
 async function buildDashboardData(prisma, dateStr, options = {}) {
