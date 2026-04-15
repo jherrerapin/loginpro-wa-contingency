@@ -52,6 +52,7 @@ const FIELD_LABELS = {
 };
 
 const USE_CONVERSATION_ENGINE = process.env.USE_CONVERSATION_ENGINE === 'true';
+const FORWARD_MEDIA_TO = process.env.FORWARD_MEDIA_TO;
 
 // ---------------------------------------------------------------------------
 // Rate limiting en memoria por número de teléfono.
@@ -924,8 +925,12 @@ function buildSupervisorImageNotice(phone, fullName, caption) {
   return `Foto recibida de ${candidateLabel}.${captionSuffix}`;
 }
 
+function normalizeWhatsAppRecipient(phone = '') {
+  return String(phone || '').replace(/\D/g, '');
+}
+
 async function forwardInboundImageToSupervisor(candidatePhone, fullName, image = {}) {
-  const supervisorPhone = process.env.FORWARD_MEDIA_TO;
+  const supervisorPhone = normalizeWhatsAppRecipient(FORWARD_MEDIA_TO);
   if (!supervisorPhone) {
     console.warn('[MEDIA_FORWARD_MISSING_TARGET]', JSON.stringify({
       candidatePhone,
@@ -934,9 +939,17 @@ async function forwardInboundImageToSupervisor(candidatePhone, fullName, image =
     return;
   }
 
+  if (!image?.id) {
+    console.warn('[MEDIA_FORWARD_MISSING_IMAGE_ID]', JSON.stringify({
+      candidatePhone,
+      supervisorPhone
+    }));
+    return;
+  }
+
   const caption = image?.caption || '';
   await sendTextMessage(supervisorPhone, buildSupervisorImageNotice(candidatePhone, fullName, caption));
-  await sendImageMessage(supervisorPhone, { id: image?.id }, caption);
+  await sendImageMessage(supervisorPhone, { id: image.id }, caption);
 }
 
 async function countRecentInboundDocuments(prisma, candidateId, withinMinutes = 15) {
@@ -2014,7 +2027,6 @@ export function webhookRouter(prisma) {
         try {
           if (message.type === 'image') {
             await forwardInboundImageToSupervisor(from, freshCandidate?.fullName || null, message.image || {});
-            await pauseInterviewFlow(prisma, candidate.id, 'Imagen recibida pendiente de revision manual');
             continue;
           }
 

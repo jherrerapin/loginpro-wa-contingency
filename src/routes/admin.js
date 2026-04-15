@@ -516,10 +516,26 @@ function formatActorRoleLabel(role) {
   return normalized;
 }
 
+function normalizeAdminMojibake(label = '') {
+  return normalizeString(label)
+    .replaceAll('Ã¡', 'á')
+    .replaceAll('Ã©', 'é')
+    .replaceAll('Ã­', 'í')
+    .replaceAll('Ã³', 'ó')
+    .replaceAll('Ãº', 'ú')
+    .replaceAll('Ã', 'Á')
+    .replaceAll('Ã‰', 'É')
+    .replaceAll('Ã', 'Í')
+    .replaceAll('Ã“', 'Ó')
+    .replaceAll('Ãš', 'Ú')
+    .replaceAll('Ã±', 'ñ')
+    .replaceAll('Ã‘', 'Ñ');
+}
+
 function formatAdminEventLabel(event = {}) {
   const normalizedType = normalizeString(event.eventType);
-  const fallback = normalizeString(event.eventLabel);
-  if (normalizedType === 'STATUS_CHANGED') return fallback || 'Cambio de estado';
+  const fallback = normalizeAdminMojibake(event.eventLabel);
+  if (normalizedType === 'STATUS_CHANGED') return 'Edición manual de estado';
   if (normalizedType === 'WHATSAPP_OPENED') return 'Abrio WhatsApp del candidato';
   if (normalizedType === 'INTERVIEW_ASSIGNED') return 'Asigno entrevista manualmente';
   if (normalizedType === 'INTERVIEW_STATUS_CHANGED') return 'Actualizo estado de entrevista';
