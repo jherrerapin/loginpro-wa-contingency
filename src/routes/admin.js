@@ -1784,7 +1784,7 @@ export function adminRouter(prisma) {
       candidateId: booking.candidateId,
       actorRole: req.userRole,
       eventType: 'INTERVIEW_STATUS_CHANGED',
-      eventLabel: 'ActualizÃ³ estado de entrevista',
+      eventLabel: 'Actualizó estado de entrevista',
       fromValue: booking.status,
       toValue: nextStatus
     });
@@ -1991,7 +1991,7 @@ export function adminRouter(prisma) {
         candidateId: candidate.id,
         actorRole: req.userRole,
         eventType: 'INTERVIEW_ASSIGNED',
-        eventLabel: 'AsignÃ³ entrevista manualmente',
+        eventLabel: 'Asignó entrevista manualmente',
         note: chosenOffer.formattedDate
       });
 
@@ -2081,7 +2081,7 @@ export function adminRouter(prisma) {
         actorRole: req.userRole,
         eventType: 'WHATSAPP_OPENED',
         fromValue: formatAdminEventValue(candidate.status),
-        eventLabel: 'AbriÃ³ WhatsApp del candidato',
+        eventLabel: 'Abrió WhatsApp del candidato',
         toValue: 'Contactado'
       });
     }
@@ -2316,7 +2316,7 @@ export function adminRouter(prisma) {
         candidateId: id,
         actorRole: req.userRole,
         eventType: 'STATUS_CHANGED',
-        eventLabel: 'EdiciÃ³n manual de estado',
+        eventLabel: 'Edición manual de estado',
         fromValue: formatAdminEventValue(existingCandidate.status),
         toValue: formatAdminEventValue(data.status)
       });
@@ -2326,7 +2326,7 @@ export function adminRouter(prisma) {
         candidateId: id,
         actorRole: req.userRole,
         eventType: 'DEV_NOTES_UPDATED',
-        eventLabel: 'ActualizÃ³ observaciones dev',
+        eventLabel: 'Actualizó observaciones dev',
         note: data.interviewNotes ? 'Observaciones actualizadas.' : 'Observaciones eliminadas.'
       });
     }
@@ -2335,7 +2335,7 @@ export function adminRouter(prisma) {
         candidateId: id,
         actorRole: req.userRole,
         eventType: 'GENDER_UPDATED',
-        eventLabel: 'ActualizÃ³ gÃ©nero del candidato',
+        eventLabel: 'Actualizó género del candidato',
         fromValue: existingCandidate.gender,
         toValue: data.gender
       });
@@ -2363,7 +2363,7 @@ export function adminRouter(prisma) {
       candidateId: id,
       actorRole: req.userRole,
       eventType: 'BOT_PAUSED',
-      eventLabel: 'PausÃ³ el bot',
+      eventLabel: 'Pausó el bot',
       note: reason
     });
     res.redirect(`/admin/candidates/${id}?botPauseSuccess=` + encodeURIComponent('Bot pausado correctamente.'));
@@ -2386,7 +2386,7 @@ export function adminRouter(prisma) {
       candidateId: id,
       actorRole: req.userRole,
       eventType: 'BOT_RESUMED',
-      eventLabel: 'ReanudÃ³ el bot'
+      eventLabel: 'Reanudó el bot'
     });
     res.redirect(`/admin/candidates/${id}?botPauseSuccess=` + encodeURIComponent('Bot reanudado correctamente.'));
   });
