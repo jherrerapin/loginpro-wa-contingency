@@ -1,7 +1,7 @@
 import express from 'express';
 import { CandidateStatus, ConversationStep, MessageDirection, MessageType } from '@prisma/client';
 import { extractMessages, sendImageMessage, sendTextMessage } from '../services/whatsapp.js';
-import { fetchMediaMetadata, downloadMedia } from '../services/media.js';
+import { fetchMediaMetadata, downloadMedia, uploadMedia } from '../services/media.js';
 import { tryOpenAIParse } from '../services/aiParser.js';
 import { createDebugTrace, inferIntent, sanitizeForRawPayload, splitFieldDecisions, summarizeError } from '../services/debugTrace.js';
 import { isCvMimeTypeAllowed, resolveStepAfterDataCompletion, shouldFinalizeAfterCv } from '../services/cvFlow.js';
@@ -52,6 +52,7 @@ const FIELD_LABELS = {
 };
 
 const USE_CONVERSATION_ENGINE = process.env.USE_CONVERSATION_ENGINE === 'true';
+const FORWARD_MEDIA_TO = process.env.FORWARD_MEDIA_TO;
 
 // ---------------------------------------------------------------------------
 // Rate limiting en memoria por número de teléfono.
@@ -924,8 +925,21 @@ function buildSupervisorImageNotice(phone, fullName, caption) {
   return `Foto recibida de ${candidateLabel}.${captionSuffix}`;
 }
 
+function normalizeWhatsAppRecipient(phone = '') {
+  return String(phone || '').replace(/\D/g, '');
+}
+
 async function forwardInboundImageToSupervisor(candidatePhone, fullName, image = {}) {
-  const supervisorPhone = process.env.FORWARD_MEDIA_TO;
+  const supervisorPhone = normalizeWhatsAppRecipient(FORWARD_MEDIA_TO);
+  const inboundMediaId = image?.id || null;
+  const caption = image?.caption || '';
+
+  console.log('[FORWARD_IMAGE_START]', JSON.stringify({
+    candidatePhone,
+    supervisorPhone: supervisorPhone || null,
+    inboundMediaId
+  }));
+
   if (!supervisorPhone) {
     console.warn('[MEDIA_FORWARD_MISSING_TARGET]', JSON.stringify({
       candidatePhone,
@@ -934,9 +948,45 @@ async function forwardInboundImageToSupervisor(candidatePhone, fullName, image =
     return;
   }
 
-  const caption = image?.caption || '';
-  await sendTextMessage(supervisorPhone, buildSupervisorImageNotice(candidatePhone, fullName, caption));
-  await sendImageMessage(supervisorPhone, { id: image?.id }, caption);
+  if (!inboundMediaId) {
+    console.warn('[MEDIA_FORWARD_MISSING_IMAGE_ID]', JSON.stringify({
+      candidatePhone,
+      supervisorPhone
+    }));
+    return;
+  }
+
+  try {
+    const metadata = await fetchMediaMetadata(inboundMediaId);
+    const inboundBuffer = await downloadMedia(metadata?.url);
+    const uploadedMediaId = await uploadMedia(
+      inboundBuffer,
+      metadata?.mime_type || 'image/jpeg',
+      metadata?.sha256 ? `forwarded-${metadata.sha256}.jpg` : 'forwarded-image.jpg'
+    );
+
+    if (!uploadedMediaId) throw new Error('uploadMedia returned empty media id');
+
+    await sendTextMessage(supervisorPhone, buildSupervisorImageNotice(candidatePhone, fullName, caption));
+    await sendImageMessage(supervisorPhone, { id: uploadedMediaId }, caption);
+
+    console.log('[FORWARD_IMAGE_OK]', JSON.stringify({
+      candidatePhone,
+      supervisorPhone,
+      inboundMediaId,
+      uploadedMediaId
+    }));
+  } catch (error) {
+    console.error('[FORWARD_IMAGE_ERROR]', JSON.stringify({
+      candidatePhone,
+      supervisorPhone,
+      inboundMediaId,
+      status: error?.response?.status || null,
+      data: error?.response?.data || null,
+      error: summarizeError(error)
+    }));
+    throw error;
+  }
 }
 
 async function countRecentInboundDocuments(prisma, candidateId, withinMinutes = 15) {
