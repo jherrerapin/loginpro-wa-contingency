@@ -211,6 +211,12 @@ export function createMockPrisma(initialState = {}) {
       if (!first) return null;
       return select ? applySelect(first, select) : clone(first);
     },
+    async findMany({ where, orderBy, take, select } = {}) {
+      let rows = state.interviewBookings.filter((booking) => matchesWhere(booking, where));
+      rows = sortRows(rows, orderBy);
+      if (take) rows = rows.slice(0, take);
+      return rows.map((row) => (select ? applySelect(row, select) : clone(row)));
+    },
     async create({ data } = {}) {
       const booking = {
         id: data.id || `booking-${state.interviewBookings.length + 1}`,
@@ -220,6 +226,12 @@ export function createMockPrisma(initialState = {}) {
       };
       state.interviewBookings.push(booking);
       return clone(booking);
+    },
+    async update({ where, data } = {}) {
+      const row = state.interviewBookings.find((booking) => booking.id === where?.id);
+      if (!row) throw new Error(`Booking ${where?.id} not found`);
+      applyUpdate(row, data);
+      return clone(row);
     },
     async updateMany({ where, data } = {}) {
       const rows = state.interviewBookings.filter((booking) => matchesWhere(booking, where));
