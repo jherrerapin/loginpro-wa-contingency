@@ -121,15 +121,25 @@ export async function analyzeAttachment({ buffer, mimeType = '', filename = '' }
   if (mime.includes('pdf') || name.endsWith('.pdf')) {
     const parsed = await pdfParse(buffer).catch(() => ({ text: '' }));
     const text = String(parsed?.text || '').slice(0, 6000);
-    if (text.trim().length >= MIN_TEXT_LENGTH) return classifyFromText(text, 'pdf');
-    const fallback = await classifyWithResponses({ mimeType: mime || 'application/pdf', filename: name, textHint: text });
-    return buildResult({ ...fallback, attachmentKind: 'pdf', extractedText: text });
+    if (process.env.OPENAI_API_KEY) {
+      const ai = await classifyWithResponses({ mimeType: mime || 'application/pdf', filename: name, textHint: text });
+      if (ai.classification !== 'UNREADABLE' || text.trim().length < MIN_TEXT_LENGTH) {
+        return buildResult({ ...ai, attachmentKind: 'pdf', extractedText: text });
+      }
+    }
+    return buildResult({ ...classifyFromText(text, 'pdf'), attachmentKind: 'pdf', extractedText: text });
   }
 
   if (mime.includes('word') || name.endsWith('.docx') || name.endsWith('.doc')) {
     const parsed = await mammoth.extractRawText({ buffer }).catch(() => ({ value: '' }));
     const text = String(parsed?.value || '').slice(0, 6000);
-    return classifyFromText(text, 'doc');
+    if (process.env.OPENAI_API_KEY) {
+      const ai = await classifyWithResponses({ mimeType: mime || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', filename: name, textHint: text });
+      if (ai.classification !== 'UNREADABLE' || text.trim().length < MIN_TEXT_LENGTH) {
+        return buildResult({ ...ai, attachmentKind: 'doc', extractedText: text });
+      }
+    }
+    return buildResult({ ...classifyFromText(text, 'doc'), attachmentKind: 'doc', extractedText: text });
   }
 
   return buildResult({ attachmentKind: 'other', classification: 'OTHER', confidence: 0.5, rationale: 'unsupported_format', evidence: ['unsupported_format'] });

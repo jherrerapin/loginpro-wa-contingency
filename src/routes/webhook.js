@@ -968,6 +968,23 @@ async function countRecentInboundDocuments(prisma, candidateId, withinMinutes = 
   });
 }
 
+async function saveAttachmentAnalysis(prisma, candidateId, inboundMessageId, attachment, analysis) {
+  if (!prisma?.attachmentAnalysis?.create) return;
+  await prisma.attachmentAnalysis.create({
+    data: {
+      candidateId,
+      messageId: inboundMessageId || null,
+      classification: analysis.classification,
+      confidence: Number(analysis.confidence || 0),
+      evidence: Array.isArray(analysis.evidence) ? analysis.evidence.join(' | ').slice(0, 1000) : String(analysis.rationale || '').slice(0, 1000),
+      mimeType: attachment?.mimeType || null,
+      fileName: attachment?.fileName || null
+    }
+  }).catch((error) => {
+    console.warn('[ATTACHMENT_ANALYSIS_SAVE_ERROR]', error?.message || error);
+  });
+}
+
 async function getRecentOutboundMessages(prisma, candidateId, limit = 6) {
   if (!prisma?.message?.findMany) return [];
   return prisma.message.findMany({
@@ -2073,7 +2090,11 @@ export function webhookRouter(prisma) {
               }).catch((error) => console.warn('[ADMIN_FORWARD_IMAGE_QUEUE_ERROR]', error?.message || error));
             }
             if (isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)) {
-              const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound });
+              const policyReply = buildPolicyReply({
+                replyIntent: 'request_cv_pdf_word',
+                recentOutbound,
+                contextSummary: 'adjunto imagen'
+              });
               await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
             } else {
               await forwardInboundImageToSupervisor(from, freshCandidate?.fullName || null, message.image || {});
@@ -2112,6 +2133,13 @@ export function webhookRouter(prisma) {
                 const analysis = isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)
                   ? await analyzeAttachment({ buffer: cvBuffer, mimeType, filename })
                   : { classification: 'CV_VALID', confidence: 1, evidence: 'legacy_flow' };
+                await saveAttachmentAnalysis(
+                  prisma,
+                  candidate.id,
+                  inbound.id,
+                  { mimeType, fileName: filename },
+                  analysis
+                );
 
                 if (analysis.classification === 'CV_VALID') {
                   await storeCandidateCv(prisma, candidate.id, cvBuffer, {
@@ -2122,13 +2150,17 @@ export function webhookRouter(prisma) {
                 } else {
                   debugTrace.cv_saved = false;
                   if (analysis.classification === 'CV_IMAGE_ONLY') {
-                    const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound });
+                    const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound, contextSummary: 'adjunto imagen de hoja de vida' });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   } else if (analysis.classification === 'ID_DOC') {
-                    const policyReply = buildPolicyReply({ replyIntent: 'attachment_id_doc', recentOutbound });
+                    const policyReply = buildPolicyReply({ replyIntent: 'attachment_id_doc', recentOutbound, contextSummary: 'adjunto documento de identidad' });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   } else {
-                    const policyReply = buildPolicyReply({ replyIntent: analysis.classification === 'UNREADABLE' ? 'attachment_unreadable' : 'request_missing_cv', recentOutbound });
+                    const policyReply = buildPolicyReply({
+                      replyIntent: analysis.classification === 'UNREADABLE' ? 'attachment_unreadable' : 'request_missing_cv',
+                      recentOutbound,
+                      contextSummary: 'adjunto archivo'
+                    });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   }
                   continue;
