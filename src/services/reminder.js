@@ -203,7 +203,7 @@ async function runInterviewKeepaliveDispatcher(prisma, now = new Date()) {
       ? await findActiveInterviewBooking(prisma, candidate.id)
       : null;
 
-    if (isFeatureEnabled('FF_STOP_KEEPALIVE_AFTER_INTERVIEW', false) && booking?.scheduledAt) {
+    if (booking?.scheduledAt) {
       const scheduledAt = new Date(booking.scheduledAt);
       const closedStatuses = new Set(['CANCELLED', 'RESCHEDULED', 'NO_SHOW', 'ATTENDED']);
       if (scheduledAt <= now || booking.reminderSentAt || booking.reminderWindowClosed || closedStatuses.has(booking.status)) {
@@ -233,9 +233,10 @@ async function runInterviewKeepaliveDispatcher(prisma, now = new Date()) {
   }
 }
 
-export async function runReminderDispatcher(prisma, { now = new Date() } = {}) {
+export async function runReminderDispatcher(prisma, { now = new Date(), candidateId = null } = {}) {
   const dueCandidates = await prisma.candidate.findMany({
     where: {
+      ...(candidateId ? { id: candidateId } : {}),
       reminderState: 'SCHEDULED',
       reminderScheduledFor: { lte: now }
     },

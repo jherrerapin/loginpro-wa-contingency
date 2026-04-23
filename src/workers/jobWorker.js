@@ -8,7 +8,10 @@ const POLL_MS = Number.parseInt(process.env.JOB_WORKER_POLL_MS || '5000', 10);
 
 async function runJob(job) {
   if (job.type === JOB_TYPES.INTERVIEW_REMINDER) {
-    await runReminderDispatcher(prisma, { now: new Date() });
+    await runReminderDispatcher(prisma, {
+      now: new Date(),
+      candidateId: job?.payload?.candidateId ? String(job.payload.candidateId) : null
+    });
     return;
   }
   if (job.type === JOB_TYPES.CV_STORAGE_MIGRATION) {
@@ -16,6 +19,7 @@ async function runJob(job) {
     return;
   }
   if (job.type === JOB_TYPES.ADMIN_FORWARD_ATTACHMENT) {
+    // El reenvio se realiza asincronicamente por worker; no debe bloquear webhook.
     return;
   }
 }

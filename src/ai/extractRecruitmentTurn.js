@@ -64,7 +64,14 @@ export async function extractRecruitmentTurn({ text = '', context = {} } = {}) {
         content: [
           {
             type: 'input_text',
-            text: 'Extrae entidades de reclutamiento y evidencia. Si no hay evidencia suficiente usa null. No converses.'
+            text: `Extrae entidades de reclutamiento y evidencia verificable. Responde SOLO JSON valido bajo schema estricto.
+Reglas criticas:
+- Nunca guardes saludos/frases comunes como fullName (ej: "hola", "buenas", "mucho gusto").
+- Nunca inferir age desde direcciones como "calle 80", "carrera 7", "apto 302".
+- En gender, prioriza evidencia explicita ("soy mujer", "candidata", "soy hombre"). No fuerces inferencia debil.
+- Cada campo debe traer evidencia con snippet, source y confidence coherente.
+- Si hay ambiguedad real, deja field en null y agrega conflicts con alternatives.
+- No converses ni agregues texto fuera del JSON.`
           }
         ]
       },
@@ -97,7 +104,18 @@ export async function extractRecruitmentTurn({ text = '', context = {} } = {}) {
       timeout: 15000
     });
     const parsed = parseStructuredOutput(response.data) || fallbackResult();
-    return { used: true, status: 'ok', extraction: { ...fallbackResult(), ...parsed }, model: MODEL };
+    const base = fallbackResult();
+    return {
+      used: true,
+      status: 'ok',
+      extraction: {
+        ...base,
+        ...parsed,
+        fields: { ...base.fields, ...(parsed?.fields || {}) },
+        fieldEvidence: { ...base.fieldEvidence, ...(parsed?.fieldEvidence || {}) },
+      },
+      model: MODEL
+    };
   } catch (error) {
     return { used: true, status: 'error', extraction: fallbackResult(), model: MODEL, error };
   }

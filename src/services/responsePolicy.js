@@ -63,17 +63,25 @@ function semanticSimilarity(a = '', b = '') {
 function isStrongRepeat(candidateReply, recentOutbound = []) {
   const norm = normalize(candidateReply);
   if (!norm) return false;
-  return recentOutbound.some((msg) => semanticSimilarity(norm, msg?.body || '') >= 0.86);
+  return recentOutbound.some((msg) => semanticSimilarity(norm, msg?.body || '') >= 0.8);
 }
 
-export function buildPolicyReply({ replyIntent = 'continue_flow', recentOutbound = [], fallback = '' } = {}) {
+function buildContextSuffix(contextSummary = '') {
+  const normalized = normalize(contextSummary);
+  if (!normalized) return '';
+  if (normalized.includes('pregunta')) return ' Respondo tu pregunta y seguimos.';
+  if (normalized.includes('adjunto') || normalized.includes('archivo')) return ' Ya revise el adjunto que enviaste.';
+  return '';
+}
+
+export function buildPolicyReply({ replyIntent = 'continue_flow', recentOutbound = [], fallback = '', contextSummary = '' } = {}) {
   const variants = INTENT_VARIANTS[replyIntent] || [fallback || INTENT_VARIANTS.continue_flow[0]];
   for (const option of variants) {
     if (!isStrongRepeat(option, recentOutbound)) {
-      return { text: option, intent: replyIntent };
+      return { text: `${option}${buildContextSuffix(contextSummary)}`.trim(), intent: replyIntent };
     }
   }
 
   const degraded = fallback || variants[0] || INTENT_VARIANTS.continue_flow[0];
-  return { text: degraded, intent: replyIntent };
+  return { text: `${degraded}${buildContextSuffix(contextSummary)}`.trim(), intent: replyIntent };
 }

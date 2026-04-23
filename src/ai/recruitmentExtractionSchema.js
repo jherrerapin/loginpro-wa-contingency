@@ -45,10 +45,11 @@ export const RECRUITMENT_EXTRACTION_SCHEMA = {
           type: 'object',
           additionalProperties: false,
           properties: {
-            field: { type: 'string' },
-            reason: { type: 'string' }
+            field: { type: 'string', enum: ['fullName', 'age', 'documentType', 'documentNumber', 'gender', 'locality', 'neighborhood', 'transportMode', 'medicalRestrictions', 'experienceInfo'] },
+            reason: { type: 'string' },
+            alternatives: { type: 'array', items: { type: 'string' } }
           },
-          required: ['field', 'reason']
+          required: ['field', 'reason', 'alternatives']
         }
       },
       attachment: {
