@@ -5,9 +5,12 @@ Este delta refina componentes existentes sin rehacer arquitectura:
 - **Extractor estructurado**: se amplió el schema con conflictos estructurados, `replyIntent` tipado y evidencia por campo consistente para policy.
 - **Policy layer**: endurece bloqueo de saludo como nombre, bloqueo de dirección como edad y protección anti-autodescarte para campos críticos con evidencia débil.
 - **Response policy**: ahora usa variantes por intención, control de repetición semántica y salida con `text + intent`.
+- **Response policy**: se añadió intención explícita `request_missing_data` y selección con anti-repetición sobre outbound reciente.
 - **Attachment analyzer**: pipeline híbrida PDF/DOCX + fallback multimodal con Responses API, sin tratar automáticamente toda imagen como HV en foto.
 - **Webhook**: integra `responsePolicy` para respuestas de adjuntos y evita pausar automáticamente el bot por recepción de media.
+- **Webhook**: ahora pasa outbound reciente al `responsePolicy` para variar respuestas de adjuntos sin repetir frase exacta.
 - **Reminder**: recordatorio operativo ajustado a una hora y encolado con JobQueue (cuando `FF_POSTGRES_JOB_QUEUE=true`).
+- **JobQueue**: se agrega `completedAt` para trazabilidad de finalización en jobs `DONE` y `FAILED` terminales.
 - **Tests**: se agregan casos delta para adjuntos, policy de respuesta y encolamiento del reminder.
 
 ## Feature flags relevantes (fallback false)

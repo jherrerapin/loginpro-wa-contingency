@@ -296,6 +296,7 @@ model JobQueue {
   maxAttempts Int      @default(5) @map("max_attempts")
   status      JobStatus @default(PENDING)
   lastError   String?  @map("last_error")
+  completedAt DateTime? @map("completed_at")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
