@@ -33,3 +33,44 @@ Este delta refina componentes existentes sin rehacer arquitectura:
 - `FF_ATTACHMENT_ANALYZER`
 - `FF_SEMANTIC_SHORT_MEMORY`
 - `FF_ASYNC_ADMIN_MEDIA_FORWARD`
+
+## Interview lifecycle hardening definitivo
+
+- **SCHEDULED vs CONFIRMED**:
+  - Aceptar un horario crea/actualiza booking en `SCHEDULED`.
+  - `CONFIRMED` solo se permite como confirmación de asistencia cerca de entrevista.
+  - Ventana explícita de confirmación: `INTERVIEW_CONFIRMATION_WINDOW_HOURS` (default `6` horas).
+  - Si ya se envió reminder de entrevista (`reminderSentAt`), una confirmación afirmativa sí puede marcar `CONFIRMED`.
+  - Un “confirmo” temprano, fuera de ventana y sin reminder enviado, **no** cambia estado.
+
+- **Recordatorio real de entrevista**:
+  - Se ejecuta a `scheduledAt - 1 hora`.
+  - Marca `reminderSentAt` y cierra keepalive (`reminderWindowClosed=true`).
+  - Solo envía si booking está activo (`SCHEDULED`/`CONFIRMED`), no vencido y sin reminder previo.
+  - El copy es explícitamente de entrevista (no de faltantes/HV).
+
+- **Intenciones de entrevista centralizadas**:
+  - Se agregó servicio determinista reutilizable (`interviewLifecycle`) para detectar:
+    - `confirm_attendance`
+    - `cancel_interview`
+    - `reschedule_interview`
+    - `none`
+  - La detección depende de texto + proximidad temporal + estado de reminder + existencia de booking activo.
+
+- **Política de cancelación / reagendamiento**:
+  - Cancelación explícita: `booking.status = CANCELLED` + `reminderResponse` con evidencia textual.
+  - Reagendamiento explícito: `booking.status = RESCHEDULED` + `reminderResponse`, conservando oferta de nuevo slot cuando hay wiring.
+
+- **Política NO_RESPONSE (10 minutos antes)**:
+  - Configurable por `INTERVIEW_NO_RESPONSE_MINUTES_BEFORE` (default `10`).
+  - Si reminder ya salió y no existe respuesta inbound del candidato, al entrar en umbral se marca `NO_RESPONSE`.
+  - Luego de `NO_RESPONSE`, no se insiste con keepalive ni nuevos recordatorios automáticos para esa entrevista.
+
+- **Keepalive y cero insistencia post-entrevista**:
+  - Keepalive solo corre si existe booking activo real.
+  - No se envía keepalive para candidatos en `SCHEDULING` sin booking.
+  - Keepalive se corta cuando: reminder enviado/intento, booking cerrado/inactivo o entrevista vencida.
+  - Después de `scheduledAt`: no keepalive, no reminder de entrevista, no insistencia automática por esa cita.
+
+- **Canal WhatsApp**:
+  - Se mantiene política sin templates de Meta para este flujo.
