@@ -23,6 +23,10 @@ import { shouldBlockAutomation } from '../services/botAutomationPolicy.js';
 import { runChatEngine } from '../services/chatEngine.js';
 import { think, extractEngineCandidateFields } from '../services/conversationEngine.js';
 import { storeCandidateCv } from '../services/cvStorage.js';
+import { applyFieldPolicy } from '../services/policyLayer.js';
+import { analyzeAttachment } from '../services/attachmentAnalyzer.js';
+import { isFeatureEnabled } from '../services/featureFlags.js';
+import { enqueueJob, JOB_TYPES } from '../services/jobQueue.js';
 import { findActiveVacancies, findAllVacancies, normalizeResolverText, resolveVacancyFromText } from '../services/vacancyResolver.js';
 import { cancelCandidateBookings, createBooking, formatInterviewDate, getNextAvailableSlot, getNextAvailableSlotAfter, getInterviewReminderAt, hydrateOfferedSlot } from '../services/interviewScheduler.js';
 import { generateBookingConfirmation, generateInterviewOffer } from '../services/naturalReply.js';
@@ -121,9 +125,20 @@ function explicitlyLacksValidDocument(text = '') {
   const n = normalizeComparableText(text);
   return /no tengo documento vigente|documento vencido|sin documento vigente|sin papeles|no tengo papeles|no tengo documento valido|sin documento valido|no tengo ppt|sin ppt|no tengo pasaporte|sin pasaporte|no tengo cedula de extranjeria|sin cedula de extranjeria|no tengo ce|sin ce/.test(n);
 }
-function shouldRejectByRequirements(text, parsed = {}) {
+function hasStrongAgeEvidence(text = '', parsed = {}, evidenceByField = {}) {
+  const age = Number(parsed?.age);
+  if (!Number.isFinite(age)) return false;
+  const ageEvidence = evidenceByField.age || {};
+  if (Number(ageEvidence.confidence || 0) >= 0.85) return true;
   const n = normalizeComparableText(text);
-  if (parsed.age && (parsed.age < 18 || parsed.age > 50)) return { reject: true, reason: 'Edad fuera del rango permitido', details: `Edad detectada: ${parsed.age}` };
+  if (/\b(calle|carrera|cra|avenida|av)\s+\d+/.test(n)) return false;
+  return /\b(tengo|edad|anos|años|cumpli|cumplo|soy de)\b/.test(n);
+}
+function shouldRejectByRequirements(text, parsed = {}, evidenceByField = {}) {
+  const n = normalizeComparableText(text);
+  if (parsed.age && (parsed.age < 18 || parsed.age > 50) && hasStrongAgeEvidence(text, parsed, evidenceByField)) {
+    return { reject: true, reason: 'Edad fuera del rango permitido', details: `Edad detectada: ${parsed.age}` };
+  }
   if (explicitlyLacksValidDocument(n)) return { reject: true, reason: 'Documento no vigente', details: 'El candidato indicó no tener documento vigente.' };
   if (mentionsForeigner(text) && hasValidForeignDocumentMention(text, parsed)) return { reject: false };
   return { reject: false };
@@ -1118,6 +1133,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
   let currentVacancy = candidate.vacancyId ? await loadVacancyContext(prisma, candidate.vacancyId) : null;
 
   const aiResult = await tryOpenAIParse(cleanText);
+  const extractionEvidence = aiResult?.extraction?.fieldEvidence || {};
   const understanding = await conversationUnderstanding(cleanText, { aiResult });
   const localParsedData = parseNaturalData(cleanText);
   const aiFields = aiResult.parsedFields || {};
@@ -1128,6 +1144,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     ? normalizeCandidateFields(rawEngineFields)
     : {};
   const sourceByField = {};
+  const evidenceByField = {};
   const mergedData = {};
 
   for (const [field, value] of Object.entries(localParsedData)) {
@@ -1135,17 +1152,20 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     if (isHighConfidenceLocalField(field, value)) {
       mergedData[field] = value;
       mergeFieldSource(sourceByField, field, 'local');
+      evidenceByField[field] = { snippet: cleanText.slice(0, 120), confidence: 0.9, source: 'local' };
     }
   }
   for (const [field, value] of Object.entries(aiFields)) {
     if (value === undefined || value === null || value === '') continue;
     mergedData[field] = value;
     mergeFieldSource(sourceByField, field, 'openai');
+    if (extractionEvidence[field]) evidenceByField[field] = extractionEvidence[field];
   }
   for (const [field, value] of Object.entries(engineFields)) {
     if (value === undefined || value === null || value === '') continue;
     mergedData[field] = value;
     mergeFieldSource(sourceByField, field, 'engine');
+    evidenceByField[field] = evidenceByField[field] || { snippet: cleanText.slice(0, 120), confidence: 0.8, source: 'engine' };
   }
   let normalizedData = normalizeCandidateFields(mergedData);
   if (currentVacancy) {
@@ -1178,6 +1198,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     ...Object.keys(engineFields).filter((k) => normalizedData[k] !== undefined),
   ])];
   debugTrace.source_by_field = sourceByField;
+  debugTrace.field_evidence = evidenceByField;
   debugTrace.normalized_fields = normalizedData;
   debugTrace.vacancy_hint_city = vacancyHints.city;
   debugTrace.vacancy_hint_role = vacancyHints.roleHint;
@@ -1263,7 +1284,7 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     if (!shouldUsePrimaryConversationEngine(candidateState, cleanText)) return false;
 
     if (hasDataIntent) {
-      const rejection = shouldRejectByRequirements(cleanText, normalizedData);
+      const rejection = shouldRejectByRequirements(cleanText, normalizedData, evidenceByField);
       if (rejection.reject) {
         await rejectCandidate(prisma, candidate.id, from, rejection);
         return true;
@@ -1593,8 +1614,17 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
     debugTrace.suspicious_full_name_rejected = decisions.suspiciousFullNameRejected;
     debugTrace.rejected_name_reason = decisions.rejectedNameReason;
     if (decisions.suspiciousFullNameRejected) console.warn('[AI_REJECTED_NAME]', JSON.stringify({ phone: candidate.phone, fullName: normalizedData.fullName || null, reason: decisions.rejectedNameReason || 'suspicious_name' }));
-    if (Object.keys(decisions.persistedData).length) {
-      await prisma.candidate.update({ where: { id: candidate.id }, data: decisions.persistedData });
+    const policyResult = isFeatureEnabled('FF_POLICY_LAYER', false)
+      ? applyFieldPolicy({ fields: decisions.persistedData, fieldEvidence: evidenceByField }, current)
+      : { persistedFields: decisions.persistedData, reviewQueue: [], blocked: [] };
+    if (policyResult.reviewQueue.length) {
+      debugTrace.policy_review_queue = policyResult.reviewQueue;
+    }
+    if (policyResult.blocked.length) {
+      debugTrace.policy_blocked_fields = policyResult.blocked;
+    }
+    if (Object.keys(policyResult.persistedFields).length) {
+      await prisma.candidate.update({ where: { id: candidate.id }, data: policyResult.persistedFields });
     }
     const updatedCandidate = await prisma.candidate.findUnique({ where: { id: candidate.id } });
     return { updatedCandidate, decisions };
@@ -2011,15 +2041,40 @@ export function webhookRouter(prisma) {
         const automationBlocked = shouldBlockAutomation(freshCandidate);
         const debugTrace = createDebugTrace({ phone: from, currentStepBefore: freshCandidate.currentStep });
         debugTrace.cv_detected = message.type === 'document';
+        const canQueueAdminForward = isFeatureEnabled('FF_ASYNC_ADMIN_MEDIA_FORWARD', false)
+          && Boolean(process.env.ADMIN_MEDIA_FORWARD_NUMBERS)
+          && Boolean(prisma?.jobQueue?.create);
 
         try {
           if (message.type === 'image') {
-            await forwardInboundImageToSupervisor(from, freshCandidate?.fullName || null, message.image || {});
-            await pauseInterviewFlow(prisma, candidate.id, 'Imagen recibida pendiente de revision manual');
+            if (canQueueAdminForward) {
+              await enqueueJob(prisma, {
+                type: JOB_TYPES.ADMIN_FORWARD_ATTACHMENT,
+                payload: { phone: from, candidateId: candidate.id, mediaType: 'image', image: message.image || {} },
+                runAt: new Date(),
+                dedupeKey: `admin-image:${candidate.id}:${message.id || Date.now()}`,
+                maxAttempts: 4
+              }).catch((error) => console.warn('[ADMIN_FORWARD_IMAGE_QUEUE_ERROR]', error?.message || error));
+            }
+            if (isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)) {
+              await reply(prisma, candidate.id, from, 'Gracias. Si tu hoja de vida está en foto, envíamela en PDF o Word (.doc/.docx) para poder procesarla.', '', { source: 'attachment_analyzer' });
+            } else {
+              await forwardInboundImageToSupervisor(from, freshCandidate?.fullName || null, message.image || {});
+              await pauseInterviewFlow(prisma, candidate.id, 'Imagen recibida pendiente de revision manual');
+            }
             continue;
           }
 
           if (message.type === 'document') {
+            if (canQueueAdminForward) {
+              await enqueueJob(prisma, {
+                type: JOB_TYPES.ADMIN_FORWARD_ATTACHMENT,
+                payload: { phone: from, candidateId: candidate.id, mediaType: 'document', document: message.document || {} },
+                runAt: new Date(),
+                dedupeKey: `admin-document:${candidate.id}:${message.id || Date.now()}`,
+                maxAttempts: 4
+              }).catch((error) => console.warn('[ADMIN_FORWARD_DOCUMENT_QUEUE_ERROR]', error?.message || error));
+            }
             const recentDocumentsCount = await countRecentInboundDocuments(prisma, candidate.id, 15);
             debugTrace.recent_document_count = recentDocumentsCount;
             if (recentDocumentsCount >= 3) {
@@ -2039,11 +2094,27 @@ export function webhookRouter(prisma) {
               try {
                 const metadata = await fetchMediaMetadata(message.document.id);
                 const cvBuffer = await downloadMedia(metadata.url);
-                await storeCandidateCv(prisma, candidate.id, cvBuffer, {
-                  mimeType: mimeType || null,
-                  originalName: filename
-                });
-                debugTrace.cv_saved = true;
+                const analysis = isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)
+                  ? await analyzeAttachment({ buffer: cvBuffer, mimeType, filename })
+                  : { classification: 'CV_VALID', confidence: 1, evidence: 'legacy_flow' };
+
+                if (analysis.classification === 'CV_VALID') {
+                  await storeCandidateCv(prisma, candidate.id, cvBuffer, {
+                    mimeType: mimeType || null,
+                    originalName: filename
+                  });
+                  debugTrace.cv_saved = true;
+                } else {
+                  debugTrace.cv_saved = false;
+                  if (analysis.classification === 'CV_IMAGE_ONLY') {
+                    await reply(prisma, candidate.id, from, 'Gracias. Esa hoja de vida está en imagen. Envíamela en PDF o Word (.doc/.docx), por favor.', '', { source: 'attachment_analyzer' });
+                  } else if (analysis.classification === 'ID_DOC') {
+                    await reply(prisma, candidate.id, from, 'Recibí tu documento, pero aún me falta tu hoja de vida en PDF o Word (.doc/.docx).', '', { source: 'attachment_analyzer' });
+                  } else {
+                    await reply(prisma, candidate.id, from, 'Ese archivo no parece ser la hoja de vida. Compárteme tu HV en PDF o Word para continuar.', '', { source: 'attachment_analyzer' });
+                  }
+                  continue;
+                }
                 console.log('[CV_TRACE]', JSON.stringify({ phone: from, filename, mimeType }));
                 const afterCvSave = await prisma.candidate.findUnique({ where: { id: candidate.id } });
                 if (!automationBlocked && afterCvSave.currentStep !== ConversationStep.DONE) {
