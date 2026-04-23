@@ -83,6 +83,22 @@ enum BookingStatus {
   CANCELLED
 }
 
+
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum AttachmentClassification {
+  CV_VALID
+  CV_IMAGE_ONLY
+  ID_DOC
+  OTHER
+  UNREADABLE
+}
 model City {
   id         String      @id @default(cuid())
   name       String      @unique
@@ -218,6 +234,7 @@ model Candidate {
   messages               Message[]
   interviewBookings      InterviewBooking[]
   adminEvents            CandidateAdminEvent[]
+  attachmentAnalyses     AttachmentAnalysis[]
 }
 
 model Message {
@@ -266,4 +283,37 @@ model AppUser {
   updatedAt           DateTime        @updatedAt
   @@index([accessScope, scopeCity])
   @@index([scopeVacancyId])
+}
+
+
+model JobQueue {
+  id          String   @id @default(cuid())
+  type        String
+  payload     Json
+  dedupeKey   String?  @map("dedupe_key")
+  runAt       DateTime @map("run_at")
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5) @map("max_attempts")
+  status      JobStatus @default(PENDING)
+  lastError   String?  @map("last_error")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@unique([type, dedupeKey])
+}
+
+model AttachmentAnalysis {
+  id             String                   @id @default(cuid())
+  candidateId    String
+  candidate      Candidate                @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  messageId      String?
+  classification AttachmentClassification
+  confidence     Float
+  evidence       String?
+  mimeType       String?
+  fileName       String?
+  createdAt      DateTime                 @default(now())
+
+  @@index([candidateId, createdAt])
 }

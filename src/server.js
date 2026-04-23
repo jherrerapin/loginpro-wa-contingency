@@ -10,8 +10,6 @@ import { PrismaClient } from '@prisma/client';
 import { webhookRouter } from './routes/webhook.js';
 import { adminRouter } from './routes/admin.js';
 import { locationsRouter } from './routes/locations.js';
-import { runReminderDispatcher } from './services/reminder.js';
-import { runAutoCvMigration } from './services/cvMigration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -288,26 +286,3 @@ app.use((err, _req, res, next) => {
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server listening on ${port}`));
 
-const reminderIntervalMs = 60_000;
-setInterval(async () => {
-  try {
-    await runReminderDispatcher(prisma);
-  } catch (error) {
-    console.error('[REMINDER_DISPATCHER_ERROR]', error);
-  }
-}, reminderIntervalMs);
-
-const autoCvMigrationIntervalMs = Number.parseInt(process.env.AUTO_CV_MIGRATION_INTERVAL_MS || String(5 * 60_000), 10) || (5 * 60_000);
-setInterval(async () => {
-  try {
-    const result = await runAutoCvMigration(prisma);
-    if (result?.triggered) {
-      const suffix = result.failed ? ` failed=${result.failed}` : '';
-      console.log(`[AUTO_CV_MIGRATION] pending=${result.pendingCount} migrated=${result.migrated} batch=${result.batchSize}${suffix}`);
-    } else if (result?.skipped === 'below_threshold' && result.pendingCount > 0) {
-      console.log(`[AUTO_CV_MIGRATION] skipped=below_threshold pending=${result.pendingCount} threshold=${result.threshold}`);
-    }
-  } catch (error) {
-    console.error('[AUTO_CV_MIGRATION_ERROR]', error);
-  }
-}, autoCvMigrationIntervalMs);

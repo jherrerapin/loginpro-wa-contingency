@@ -6,6 +6,8 @@ import {
 } from './reminderPolicy.js';
 import { getCandidateResidenceValue, getResidenceFieldConfig } from './candidateData.js';
 import { formatInterviewDate } from './interviewScheduler.js';
+import { isFeatureEnabled } from './featureFlags.js';
+import { enqueueJob, JOB_TYPES } from './jobQueue.js';
 
 const REMINDER_DELAY_MS = 25 * 60 * 1000;
 const INTERVIEW_KEEPALIVE_SOURCE = 'interview_window_keepalive';
@@ -95,6 +97,18 @@ export async function scheduleReminderForCandidate(prisma, candidateId, now = ne
     }
   });
 
+  if (isFeatureEnabled('FF_POSTGRES_JOB_QUEUE', false) && prisma?.jobQueue?.create) {
+    await enqueueJob(prisma, {
+      type: JOB_TYPES.INTERVIEW_REMINDER,
+      payload: { candidateId },
+      runAt: reminderAt,
+      dedupeKey: `candidate:${candidateId}:reminder:${reminderAt.toISOString()}`,
+      maxAttempts: 5
+    }).catch((error) => {
+      console.warn('[REMINDER_QUEUE_ENQUEUE_FAILED]', { candidateId, error: error?.message || error });
+    });
+  }
+
   console.log('[REMINDER_TRACE]', JSON.stringify({ candidateId, event: 'reminder_scheduled', reminderAt: reminderAt.toISOString() }));
 }
 
@@ -135,7 +149,10 @@ async function findActiveInterviewBooking(prisma, candidateId) {
     },
     orderBy: { scheduledAt: 'asc' },
     select: {
-      scheduledAt: true
+      scheduledAt: true,
+      status: true,
+      reminderSentAt: true,
+      reminderWindowClosed: true
     }
   });
 }
@@ -185,6 +202,15 @@ async function runInterviewKeepaliveDispatcher(prisma, now = new Date()) {
     const booking = candidate.currentStep === 'SCHEDULED'
       ? await findActiveInterviewBooking(prisma, candidate.id)
       : null;
+
+    if (isFeatureEnabled('FF_STOP_KEEPALIVE_AFTER_INTERVIEW', false) && booking?.scheduledAt) {
+      const scheduledAt = new Date(booking.scheduledAt);
+      const closedStatuses = new Set(['CANCELLED', 'RESCHEDULED', 'NO_SHOW', 'ATTENDED']);
+      if (scheduledAt <= now || booking.reminderSentAt || booking.reminderWindowClosed || closedStatuses.has(booking.status)) {
+        continue;
+      }
+    }
+
     const body = buildInterviewKeepaliveText(candidate, booking);
     const windowState = getWhatsappWindowState(candidate.lastInboundAt, now);
 

@@ -8,6 +8,8 @@
  */
 
 import axios from 'axios';
+import { extractRecruitmentTurn } from '../ai/extractRecruitmentTurn.js';
+import { isFeatureEnabled } from './featureFlags.js';
 
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 const REASONING_MODELS = ['o1', 'o1-mini', 'o1-preview', 'o3', 'o3-mini'];
@@ -115,6 +117,19 @@ function modelSupportsTemperature(model = '') {
 export async function tryOpenAIParse(text) {
   if (!process.env.OPENAI_API_KEY) {
     return { used: false, status: 'disabled', intent: null, parsedFields: {} };
+  }
+
+  if (isFeatureEnabled('FF_RESPONSES_EXTRACTOR', false)) {
+    const extracted = await extractRecruitmentTurn({ text });
+    const extraction = extracted?.extraction || {};
+    return {
+      used: extracted.used,
+      status: extracted.status,
+      intent: extraction.replyIntent || null,
+      parsedFields: extraction.fields || {},
+      extraction,
+      model: extracted.model || 'gpt-5.4-mini-2026-03-17'
+    };
   }
 
   const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';

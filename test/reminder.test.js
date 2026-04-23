@@ -161,3 +161,42 @@ test('runReminderDispatcher envia keepalive de entrevista antes de que venza la 
     restoreAxios();
   }
 });
+
+test('keepalive se corta cuando la entrevista ya pasó con flag activa', async () => {
+  process.env.META_PHONE_NUMBER_ID = 'meta-phone-id';
+  process.env.META_ACCESS_TOKEN = 'meta-access-token';
+  process.env.FF_STOP_KEEPALIVE_AFTER_INTERVIEW = 'true';
+
+  const now = new Date('2026-04-08T21:00:00.000Z');
+  const prisma = createMockPrisma({
+    candidates: [{
+      id: 'cand-interview-past',
+      phone: '573000000000',
+      status: 'REGISTRADO',
+      currentStep: 'SCHEDULED',
+      reminderState: 'NONE',
+      lastInboundAt: new Date('2026-04-08T20:00:00.000Z'),
+      botPaused: false
+    }],
+    interviewBookings: [{
+      id: 'booking-past',
+      candidateId: 'cand-interview-past',
+      vacancyId: 'vac',
+      slotId: 'slot',
+      scheduledAt: new Date('2026-04-08T20:30:00.000Z'),
+      status: 'SCHEDULED',
+      reminderSentAt: null,
+      reminderWindowClosed: false
+    }]
+  });
+  const whatsappMock = createWhatsappMock();
+  const restoreAxios = installOpenAIMock({ whatsappMock });
+
+  try {
+    await runReminderDispatcher(prisma, { now });
+    assert.equal(whatsappMock.sentMessages.length, 0);
+  } finally {
+    delete process.env.FF_STOP_KEEPALIVE_AFTER_INTERVIEW;
+    restoreAxios();
+  }
+});
