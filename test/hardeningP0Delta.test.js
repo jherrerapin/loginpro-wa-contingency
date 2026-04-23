@@ -32,6 +32,12 @@ test('responsePolicy mantiene intención para pedir HV en PDF/Word', () => {
   assert.match(result.text, /PDF|Word/i);
 });
 
+test('responsePolicy soporta request_missing_data con intención determinista', () => {
+  const result = buildPolicyReply({ replyIntent: 'request_missing_data', recentOutbound: [] });
+  assert.equal(result.intent, 'request_missing_data');
+  assert.match(result.text, /dato/i);
+});
+
 test('scheduleReminderForCandidate encola reminder a una hora', async () => {
   process.env.FF_POSTGRES_JOB_QUEUE = 'true';
   const now = new Date('2026-04-23T10:00:00.000Z');

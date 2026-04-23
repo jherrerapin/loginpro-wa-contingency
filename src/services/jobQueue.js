@@ -36,7 +36,10 @@ export async function claimDueJobs(prisma, { limit = 20, now = new Date() } = {}
 }
 
 export async function completeJob(prisma, id) {
-  return prisma.jobQueue.update({ where: { id }, data: { status: 'DONE', updatedAt: new Date() } });
+  return prisma.jobQueue.update({
+    where: { id },
+    data: { status: 'DONE', completedAt: new Date(), updatedAt: new Date() }
+  });
 }
 
 export async function failJob(prisma, id, errorMessage = 'unknown_error') {
@@ -49,7 +52,8 @@ export async function failJob(prisma, id, errorMessage = 'unknown_error') {
     data: {
       attempts,
       status: terminal ? 'FAILED' : 'PENDING',
-      lastError: String(errorMessage || 'unknown_error').slice(0, 400)
+      lastError: String(errorMessage || 'unknown_error').slice(0, 400),
+      completedAt: terminal ? new Date() : null
     }
   });
 }

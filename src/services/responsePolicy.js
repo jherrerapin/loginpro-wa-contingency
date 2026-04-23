@@ -33,6 +33,11 @@ const INTENT_VARIANTS = {
     'Perfecto, gracias. Continúo con tu postulación y te pido el siguiente dato enseguida.',
     'Excelente, con eso seguimos avanzando en tu registro.',
     '¡Listo! Continuemos con el siguiente paso de tu postulación.'
+  ],
+  request_missing_data: [
+    'Para continuar necesito este dato pendiente. En cuanto me lo compartas, seguimos.',
+    'Vamos bien. Solo me falta ese dato para avanzar con tu postulación.',
+    'Gracias. Compárteme ese dato faltante y continúo de inmediato con tu proceso.'
   ]
 };
 

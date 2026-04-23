@@ -968,6 +968,20 @@ async function countRecentInboundDocuments(prisma, candidateId, withinMinutes = 
   });
 }
 
+async function getRecentOutboundMessages(prisma, candidateId, limit = 6) {
+  if (!prisma?.message?.findMany) return [];
+  return prisma.message.findMany({
+    where: {
+      candidateId,
+      direction: MessageDirection.OUTBOUND,
+      messageType: MessageType.TEXT
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: { body: true }
+  });
+}
+
 async function pauseForManualQuestionReview(prisma, candidate, from, inboundText = '') {
   const reason = 'Duda posterior requiere intervencion manual';
   await pauseInterviewFlow(prisma, candidate.id, reason);
@@ -2042,6 +2056,7 @@ export function webhookRouter(prisma) {
         const automationBlocked = shouldBlockAutomation(freshCandidate);
         const debugTrace = createDebugTrace({ phone: from, currentStepBefore: freshCandidate.currentStep });
         debugTrace.cv_detected = message.type === 'document';
+        const recentOutbound = await getRecentOutboundMessages(prisma, candidate.id);
         const canQueueAdminForward = isFeatureEnabled('FF_ASYNC_ADMIN_MEDIA_FORWARD', false)
           && Boolean(process.env.ADMIN_MEDIA_FORWARD_NUMBERS)
           && Boolean(prisma?.jobQueue?.create);
@@ -2058,7 +2073,7 @@ export function webhookRouter(prisma) {
               }).catch((error) => console.warn('[ADMIN_FORWARD_IMAGE_QUEUE_ERROR]', error?.message || error));
             }
             if (isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)) {
-              const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound: [] });
+              const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound });
               await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
             } else {
               await forwardInboundImageToSupervisor(from, freshCandidate?.fullName || null, message.image || {});
@@ -2107,13 +2122,13 @@ export function webhookRouter(prisma) {
                 } else {
                   debugTrace.cv_saved = false;
                   if (analysis.classification === 'CV_IMAGE_ONLY') {
-                    const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound: [] });
+                    const policyReply = buildPolicyReply({ replyIntent: 'request_cv_pdf_word', recentOutbound });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   } else if (analysis.classification === 'ID_DOC') {
-                    const policyReply = buildPolicyReply({ replyIntent: 'attachment_id_doc', recentOutbound: [] });
+                    const policyReply = buildPolicyReply({ replyIntent: 'attachment_id_doc', recentOutbound });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   } else {
-                    const policyReply = buildPolicyReply({ replyIntent: analysis.classification === 'UNREADABLE' ? 'attachment_unreadable' : 'request_missing_cv', recentOutbound: [] });
+                    const policyReply = buildPolicyReply({ replyIntent: analysis.classification === 'UNREADABLE' ? 'attachment_unreadable' : 'request_missing_cv', recentOutbound });
                     await reply(prisma, candidate.id, from, policyReply.text, '', { source: 'attachment_analyzer', replyIntent: policyReply.intent });
                   }
                   continue;
