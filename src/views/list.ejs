@@ -584,11 +584,6 @@
     return candidate?.createdAt || null;
   }
 
-  function candidateLastMessageLabel(candidate) {
-    if (!candidate?.createdAt) return 'Fecha de registro: sin dato';
-    return 'Fecha de registro: ' + formatDateTimeCO(candidate.createdAt);
-  }
-
   function isFemaleCandidate(candidate) {
     return candidate?.gender === 'FEMALE' || candidate?.isFemaleCandidate;
   }
