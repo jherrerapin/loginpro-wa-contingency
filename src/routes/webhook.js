@@ -371,8 +371,8 @@ function buildVacancyQuestionLead(vacancy, text = '') {
   const operationZone = getVacancyOperationZone(vacancy);
   const interviewAddress = getVacancyInterviewAddress(vacancy);
   const availabilityLead = isVacancyOpen(vacancy)
-    ? 'Claro.'
-    : 'Claro. En este momento esa vacante no esta recibiendo personal, pero te comparto la informacion registrada.';
+    ? `Te cuento sobre ${vacancy?.title || vacancy?.role || 'la vacante'}`
+    : `Te cuento sobre ${vacancy?.title || vacancy?.role || 'la vacante'} y te aclaro que por ahora no esta recibiendo personal`;
   if (/(donde|direccion|ubicacion|queda|sector)/.test(n)) {
     if (vacancy?.schedulingEnabled && interviewAddress) {
       return `${availabilityLead} La vacante esta registrada para ${location || 'esa operacion'}${operationZone ? `, zona de operacion ${operationZone}` : ''}, y la direccion de entrevista es ${interviewAddress}.`;
@@ -393,8 +393,8 @@ function buildVacancyQuestionLead(vacancy, text = '') {
     return `${availabilityLead} El cargo registrado es ${vacancy?.title || vacancy?.role || 'la vacante consultada'}${description ? ` y la descripcion disponible es: ${description}.` : '.'}`;
   }
   return isVacancyOpen(vacancy)
-    ? 'Claro. Te comparto la informacion real que tengo registrada para esa vacante.'
-    : 'Claro. En este momento la vacante no esta activa para recibir personal, pero te comparto la informacion registrada y puedo dejar tu perfil guardado.';
+    ? `Con ese contexto, te doy la informacion vigente de ${vacancy?.title || vacancy?.role || 'la vacante'}.`
+    : `Con ese contexto, te comparto la informacion vigente y si quieres dejo tu perfil registrado para cuando reabran ${vacancy?.title || vacancy?.role || 'esa vacante'}.`;
 }
 function buildVacancyContinuePrompt(candidate, vacancy = null) {
   if (vacancy && !isVacancyOpen(vacancy)) {
@@ -1736,6 +1736,13 @@ export async function processText(prisma, candidate, from, text, debugTrace, opt
   }
 
   if (candidate.currentStep === ConversationStep.DONE) {
+    if (hasDataIntent) {
+      const { updatedCandidate: updated, decisions } = await applyDecisionsAndUpdate();
+      if (decisions.persistedFields.length) {
+        const body = buildUpdatedConfirmationReply(updated, decisions.persistedFields, currentVacancy);
+        return reply(prisma, candidate.id, from, body, cleanText, { body, source: 'bot_flow' });
+      }
+    }
     if (currentVacancy && isQuestionLike(cleanText)) {
       return replyWithVacancyContext(candidate, currentVacancy);
     }

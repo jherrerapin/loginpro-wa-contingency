@@ -116,6 +116,13 @@ test('extrae tiempo de experiencia solo con contexto laboral', () => {
   assert.equal(normalized.experienceTime, '2 años');
 });
 
+test('captura resumen de experiencia cuando describe funciones', () => {
+  const parsed = parseNaturalData('Experiencia de más de 10 años en manejo de personal, programación de turnos y coordinación de empaque y despacho');
+  const normalized = normalizeCandidateFields(parsed);
+  assert.equal(normalized.experienceInfo, 'Sí');
+  assert.match(normalized.experienceSummary, /manejo de personal/i);
+});
+
 test('normaliza negación de transporte sin convertirla en moto', () => {
   const parsed = parseNaturalData('no tengo moto');
   const normalized = normalizeCandidateFields(parsed);

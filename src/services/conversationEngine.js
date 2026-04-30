@@ -307,6 +307,7 @@ FALLOS RECURRENTES QUE DEBES EVITAR:
 - No ignores transportes como carro, automovil, bici, bicicleta, cicla, bus o independiente.
 - Si la vacante es en Bogota, pide y usa la localidad como zona de residencia; no sigas pidiendo barrio.
 - Si el candidato da una localidad o la menciona como barrio para Bogota, guardala como localidad.
+- No uses la frase "barrio o localidad": pide un solo dato segun la ciudad (Bogota = localidad; otras ciudades = barrio).
 - Si la vacante exige experiencia (experienceRequired = YES), debes pedir y capturar experiencia (si/no) y tiempo de experiencia.
 - Si la vacante NO exige experiencia, no bloquees el avance por ese dato.
 - Si el candidato pregunta por ciudad y no hay vacantes activas, explicalo con claridad.

@@ -523,6 +523,18 @@ function detectRobustExperienceTime(text = '') {
   return normalizeExperienceDuration(duration);
 }
 
+function detectExperienceSummary(text = '') {
+  const compact = normalizeLooseText(text);
+  if (!compact) return null;
+  if (!/\b(experien|trabaj|labor|cargo|coordin|operaci|despach|empaque|turnos?|personal)\b/.test(compact)) return null;
+  const cleaned = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[-•\s]+/, '');
+  if (cleaned.length < 12) return null;
+  return cleaned.slice(0, 280);
+}
+
 function detectLeadingName(text = '') {
   const compact = String(text || '').trim();
   if (!compact) return null;
@@ -673,8 +685,12 @@ export function parseNaturalData(text = '') {
     if (!result.experienceInfo) result.experienceInfo = 'Sí';
   }
 
-  const positiveExperience = /\b(tengo experiencia|cuento con experiencia|si tengo experiencia|tengo mas de|he trabajado|trabaje|trabajando)\b/i.test(normalizeLooseText(compact));
+  const positiveExperience = /\b(tengo experiencia|cuento con experiencia|si tengo experiencia|tengo mas de|experiencia de|he trabajado|trabaje|trabajando)\b/i.test(normalizeLooseText(compact));
   if (!result.experienceInfo && positiveExperience) result.experienceInfo = 'Sí';
+  if (!result.experienceSummary && (result.experienceInfo === 'Sí' || /experien|trabaj|labor|cargo|coordin|operaci/i.test(compact))) {
+    const summary = detectExperienceSummary(text);
+    if (summary) result.experienceSummary = summary;
+  }
 
   const detectedName = detectLeadingName(text);
   if (detectedName) result.fullName = detectedName;
@@ -702,6 +718,7 @@ export function normalizeCandidateFields(fields = {}) {
   if (fields.transportMode) normalized.transportMode = normalizeTransportMode(fields.transportMode);
   if (fields.experienceInfo) normalized.experienceInfo = normalizeExperienceInfo(fields.experienceInfo) || capitalizeWords(fields.experienceInfo);
   if (fields.experienceTime) normalized.experienceTime = normalizeExperienceDuration(fields.experienceTime);
+  if (fields.experienceSummary) normalized.experienceSummary = String(fields.experienceSummary).trim().slice(0, 280);
   if (fields.gender) {
     const gender = String(fields.gender).trim().toUpperCase();
     if (['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'].includes(gender)) normalized.gender = gender;
