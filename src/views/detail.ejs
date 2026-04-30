@@ -675,7 +675,7 @@
           </div>
           <div class="field-group">
             <label for="experienceTime"><%= candidate?.vacancy?.experienceTimeText ? `Tiempo de experiencia (${candidate.vacancy.experienceTimeText})` : 'Tiempo de experiencia' %></label>
-            <input id="experienceTime" name="experienceTime" type="text" value="<%= candidate.experienceTime || '' %>" required />
+            <input id="experienceTime" name="experienceTime" type="text" value="<%= candidate.experienceTime || '' %>" <%= candidate.experienceInfo === 'Sí' ? 'required' : '' %> />
           </div>
           <% } %>
           <div class="field-group">

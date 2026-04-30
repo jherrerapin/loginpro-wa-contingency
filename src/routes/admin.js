@@ -2317,8 +2317,8 @@ export function adminRouter(prisma) {
       experienceTime:      normalizeString(raw.experienceTime),
     });
     candidateCoreFields = alignCandidateLocationFields(candidateCoreFields, existingCandidate.vacancy, { clearAlternate: true });
-    if (existingCandidate.vacancy?.experienceRequired === 'YES' && !candidateCoreFields.experienceTime) {
-      return res.redirect(withFlashMessage(returnTo, 'error', 'Para esta vacante debes diligenciar el tiempo de experiencia del candidato.'));
+    if (existingCandidate.vacancy?.experienceRequired === 'YES' && candidateCoreFields.experienceInfo === 'Sí' && !candidateCoreFields.experienceTime) {
+      return res.redirect(withFlashMessage(returnTo, 'error', 'Para esta vacante debes diligenciar el tiempo de experiencia del candidato cuando tenga experiencia.'));
     }
     const adminStatusFields = {
       rejectionReason:  normalizeString(raw.rejectionReason),
