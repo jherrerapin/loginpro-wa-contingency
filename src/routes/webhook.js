@@ -176,6 +176,15 @@ function getMissingFieldsForVacancy(candidate, vacancy = null) {
   if (missingResidence) m.push(missingResidence);
   if (!candidate.medicalRestrictions) m.push('restricciones medicas');
   if (!candidate.transportMode) m.push('medio de transporte');
+  if (vacancy?.experienceRequired === 'YES') {
+    if (!candidate.experienceInfo) m.push('experiencia (si o no)');
+    if (!candidate.experienceTime) {
+      const timeLabel = vacancy?.experienceTimeText
+        ? `tiempo de experiencia (${vacancy.experienceTimeText})`
+        : 'tiempo de experiencia';
+      m.push(timeLabel);
+    }
+  }
   return m;
 }
 function formatFieldListForVacancy(fields = [], vacancy = null) {
@@ -189,7 +198,14 @@ function formatFieldListForVacancy(fields = [], vacancy = null) {
 }
 function buildDataRequestPrompt(vacancy = null) {
   const residenceConfig = getResidenceFieldConfig(vacancy);
-  return `Perfecto. Enviame por favor estos datos para continuar: nombre completo, tipo de documento, numero de documento, edad, ${residenceConfig.label}, si tienes restricciones medicas y que medio de transporte tienes. Puedes enviarlos en un solo mensaje, como te sea mas facil.`;
+  const base = `Perfecto. Enviame por favor estos datos para continuar: nombre completo, tipo de documento, numero de documento, edad, ${residenceConfig.label}, si tienes restricciones medicas y que medio de transporte tienes.`;
+  if (vacancy?.experienceRequired === 'YES') {
+    const timeLabel = vacancy?.experienceTimeText
+      ? `tiempo de experiencia (${vacancy.experienceTimeText})`
+      : 'tiempo de experiencia';
+    return `${base} Tambien confirmame si tienes experiencia (si o no) y tu ${timeLabel}. Puedes enviarlos en un solo mensaje, como te sea mas facil.`;
+  }
+  return `${base} Puedes enviarlos en un solo mensaje, como te sea mas facil.`;
 }
 function getMissingFields(candidate, vacancy = null) {
   return getMissingFieldsForVacancy(candidate, vacancy);
@@ -858,6 +874,8 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
   } else if (primaryAction === 'confirm_booking') {
     body = await buildInterviewConfirmationReply(candidateAfterActions, vacancy, nextSlot);
     source = 'interview_booking_confirmation';
+  } else if (shouldForceFlowFollowUp(body, candidateAfterActions, primaryAction)) {
+    body = `${body} ${buildVacancyContinuePrompt(candidateAfterActions, vacancy)}`.trim();
   }
 
   const rawPayload = source.startsWith('interview_')
@@ -866,6 +884,14 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
 
   await reply(prisma, candidate.id, from, body, inboundText, rawPayload);
   return true;
+}
+
+function shouldForceFlowFollowUp(body, candidate, primaryAction) {
+  if (!body || primaryAction && primaryAction !== 'nothing') return false;
+  if (candidate.currentStep === ConversationStep.DONE) return false;
+  const text = String(body).toLowerCase();
+  if (text.includes('?')) return false;
+  return /\b(reviso|revisar|validando|te ubico|por ahora)\b/.test(text);
 }
 
 async function resolveVacancyFromConversation(prisma, text, options = {}) {
