@@ -858,6 +858,8 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
   } else if (primaryAction === 'confirm_booking') {
     body = await buildInterviewConfirmationReply(candidateAfterActions, vacancy, nextSlot);
     source = 'interview_booking_confirmation';
+  } else if (shouldForceFlowFollowUp(body, candidateAfterActions, primaryAction)) {
+    body = `${body} ${buildVacancyContinuePrompt(candidateAfterActions, vacancy)}`.trim();
   }
 
   const rawPayload = source.startsWith('interview_')
@@ -866,6 +868,14 @@ async function replyWithEngine(prisma, candidate, from, inboundText, providedVac
 
   await reply(prisma, candidate.id, from, body, inboundText, rawPayload);
   return true;
+}
+
+function shouldForceFlowFollowUp(body, candidate, primaryAction) {
+  if (!body || primaryAction && primaryAction !== 'nothing') return false;
+  if (candidate.currentStep === ConversationStep.DONE) return false;
+  const text = String(body).toLowerCase();
+  if (text.includes('?')) return false;
+  return /\b(reviso|revisar|validando|te ubico|por ahora)\b/.test(text);
 }
 
 async function resolveVacancyFromConversation(prisma, text, options = {}) {

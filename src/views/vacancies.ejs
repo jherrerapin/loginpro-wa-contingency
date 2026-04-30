@@ -667,7 +667,10 @@
     const visible = select.value === 'YES';
     group.style.display = visible ? '' : 'none';
     const input = group.querySelector('input[name="experienceTimeText"]');
-    if (input && !visible) input.value = '';
+    if (input) {
+      input.required = visible;
+      if (!visible) input.value = '';
+    }
   }
 
   function createRequiredDocumentRow(prefix, value = '') {

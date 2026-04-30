@@ -1154,6 +1154,11 @@ function hasValidInterviewConfig(data) {
   return Boolean(data.slotDays.length && data.slotStartTime);
 }
 
+function hasValidExperienceConfig(data) {
+  if (data.experienceRequired !== 'YES') return true;
+  return Boolean(data.experienceTimeText);
+}
+
 function buildWeeklyInterviewSlots(vacancyId, data) {
   return data.slotDays.map((dayOfWeek) => ({
     vacancyId,
@@ -2859,6 +2864,9 @@ export function adminRouter(prisma) {
     if (!hasValidInterviewConfig(data)) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Debes configurar al menos un día y una hora de entrevista válida.'));
     }
+    if (!hasValidExperienceConfig(data)) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Si la experiencia es requerida, debes diligenciar el tiempo de experiencia requerido.'));
+    }
     const city = operation.city.name;
     const key = await buildUniqueVacancyKey(prisma, data.title, city);
     await prisma.$transaction(async (tx) => {
@@ -2903,6 +2911,9 @@ export function adminRouter(prisma) {
     }
     if (!hasValidInterviewConfig(data)) {
       return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Debes configurar al menos un día y una hora de entrevista válida.'));
+    }
+    if (!hasValidExperienceConfig(data)) {
+      return res.redirect('/admin/vacancies?error=' + encodeURIComponent('Si la experiencia es requerida, debes diligenciar el tiempo de experiencia requerido.'));
     }
     const city = operation.city.name;
     if (!canMoveToRequestedCity) {
