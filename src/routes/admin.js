@@ -1647,7 +1647,9 @@ export function adminRouter(prisma) {
             interviewAddress: true,
             roleDescription: true,
             requirements: true,
-            conditions: true
+            conditions: true,
+            experienceRequired: true,
+            experienceTimeText: true
           }
         },
         messages: { orderBy: { createdAt: 'asc' } },

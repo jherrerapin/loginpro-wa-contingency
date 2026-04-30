@@ -255,6 +255,17 @@
           <label>Medio de transporte</label>
           <span><%= candidate.transportMode || '—' %></span>
         </div>
+        <% const vacancyRequiresExperience = candidate?.vacancy?.experienceRequired === 'YES'; %>
+        <% if (vacancyRequiresExperience) { %>
+        <div class="info-item">
+          <label>Experiencia</label>
+          <span><%= candidate.experienceInfo || '—' %></span>
+        </div>
+        <div class="info-item">
+          <label><%= candidate?.vacancy?.experienceTimeText ? `Tiempo de experiencia (${candidate.vacancy.experienceTimeText})` : 'Tiempo de experiencia' %></label>
+          <span><%= candidate.experienceTime || '—' %></span>
+        </div>
+        <% } %>
         <div class="info-item" style="grid-column: 1 / -1;">
           <label>Observaciones</label>
           <span><%= candidate.interviewNotes || '—' %></span>
