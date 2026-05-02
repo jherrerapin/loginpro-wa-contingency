@@ -1,8 +1,15 @@
 import axios from 'axios';
 import { RECRUITMENT_EXTRACTION_SCHEMA } from './recruitmentExtractionSchema.js';
+import {
+  buildOpenAIPrivacyMetadata,
+  maskTextForOpenAI,
+  mergeLocalSensitiveFields,
+  removeMaskedPlaceholdersFromFields
+} from '../services/openaiPrivacy.js';
+import { logOpenAIUsage } from '../services/openaiUsageLogger.js';
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses';
-const MODEL = process.env.OPENAI_EXTRACTION_MODEL || 'gpt-5.4-mini-2026-03-17';
+const MODEL = process.env.OPENAI_EXTRACTION_MODEL || process.env.OPENAI_MODEL || 'gpt-5.5-2026-04-23';
 
 function fallbackResult() {
   return {
@@ -53,23 +60,50 @@ function parseStructuredOutput(data = {}) {
   return null;
 }
 
-function buildContextPayload(text = '', context = {}) {
+function maskRecentConversation(recentConversation = []) {
+  return recentConversation.slice(-12).map((item) => {
+    if (typeof item === 'string') return maskTextForOpenAI(item).sanitizedText;
+    if (!item || typeof item !== 'object') return item;
+    return {
+      ...item,
+      body: item.body ? maskTextForOpenAI(item.body).sanitizedText : item.body,
+      text: item.text ? maskTextForOpenAI(item.text).sanitizedText : item.text
+    };
+  });
+}
+
+function maskCandidateKnownData(candidateKnownData = null) {
+  if (!candidateKnownData || typeof candidateKnownData !== 'object') return candidateKnownData;
   return {
-    candidateMessage: String(text || '').slice(0, 3000),
+    ...candidateKnownData,
+    fullName: candidateKnownData.fullName ? '[NOMBRE_CANDIDATO]' : candidateKnownData.fullName,
+    documentNumber: candidateKnownData.documentNumber ? '[DOCUMENTO]' : candidateKnownData.documentNumber,
+    phone: candidateKnownData.phone ? '[TELEFONO]' : candidateKnownData.phone
+  };
+}
+
+function buildContextPayload(maskedText = '', context = {}) {
+  return {
+    candidateMessage: String(maskedText || '').slice(0, 3000),
     conversationContext: {
       currentStep: context.currentStep || null,
       pendingFields: Array.isArray(context.pendingFields) ? context.pendingFields : [],
       lastBotQuestion: context.lastBotQuestion || null,
-      recentConversation: Array.isArray(context.recentConversation) ? context.recentConversation.slice(-12) : [],
+      recentConversation: Array.isArray(context.recentConversation) ? maskRecentConversation(context.recentConversation) : [],
       vacancy: context.vacancy || null,
-      candidateKnownData: context.candidateKnownData || null
+      candidateKnownData: maskCandidateKnownData(context.candidateKnownData || null)
     }
   };
+}
+
+function resolvePrisma(context = {}) {
+  return context.prisma || context.db || null;
 }
 
 export async function extractRecruitmentTurn({ text = '', context = {} } = {}) {
   if (!process.env.OPENAI_API_KEY) return { used: false, status: 'disabled', extraction: fallbackResult() };
 
+  const privacy = maskTextForOpenAI(text);
   const payload = {
     model: MODEL,
     input: [
@@ -80,6 +114,11 @@ export async function extractRecruitmentTurn({ text = '', context = {} } = {}) {
             type: 'input_text',
             text: `Eres el módulo de comprensión conversacional de un reclutador por WhatsApp.
 Tu tarea no es responder al candidato; tu tarea es entender el turno completo y devolver datos estructurados bajo el schema.
+
+Privacidad:
+El mensaje puede contener etiquetas como [DOCUMENTO], [TELEFONO], [EMAIL], [NUMERO_LARGO] o [NOMBRE_CANDIDATO].
+No reconstruyas ni inventes datos personales enmascarados.
+Si un dato personal está enmascarado, deja el campo en null; el backend agregará campos locales detectados antes del enmascaramiento.
 
 Principios de interpretación:
 - Usa el mensaje actual junto con el contexto de conversación, especialmente la última pregunta del bot, el paso actual y los campos pendientes.
@@ -98,7 +137,7 @@ Principios de interpretación:
         content: [
           {
             type: 'input_text',
-            text: JSON.stringify(buildContextPayload(text, context))
+            text: JSON.stringify(buildContextPayload(privacy.sanitizedText, context))
           }
         ]
       }
@@ -121,18 +160,32 @@ Principios de interpretación:
       },
       timeout: 15000
     });
+
+    await logOpenAIUsage(resolvePrisma(context), {
+      responseData: response.data,
+      modelRequested: MODEL,
+      usageType: 'responses_extractor',
+      candidate: context.candidate || context.candidateKnownData || null,
+      messageId: context.messageId || null,
+      privacy: buildOpenAIPrivacyMetadata(privacy)
+    });
+
     const parsed = parseStructuredOutput(response.data) || fallbackResult();
     const base = fallbackResult();
+    const modelFields = removeMaskedPlaceholdersFromFields(parsed?.fields || {});
+    const mergedFields = mergeLocalSensitiveFields(modelFields, privacy.localFields);
+
     return {
       used: true,
       status: 'ok',
       extraction: {
         ...base,
         ...parsed,
-        fields: { ...base.fields, ...(parsed?.fields || {}) },
+        fields: { ...base.fields, ...mergedFields },
         fieldEvidence: { ...base.fieldEvidence, ...(parsed?.fieldEvidence || {}) },
       },
-      model: MODEL
+      model: MODEL,
+      privacyRedactions: privacy.redactionSummary
     };
   } catch (error) {
     return { used: true, status: 'error', extraction: fallbackResult(), model: MODEL, error };
