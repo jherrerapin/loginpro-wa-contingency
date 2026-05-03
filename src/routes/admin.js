@@ -640,6 +640,15 @@ function buildLastBotFlowIssue(messages = []) {
   };
 }
 
+function sumConversationTokenUsage(messages = []) {
+  return (messages || []).reduce((acc, message) => {
+    const trace = message?.rawPayload?.debugTrace || {};
+    acc.input += Number(trace.openai_input_tokens || 0);
+    acc.output += Number(trace.openai_output_tokens || 0);
+    return acc;
+  }, { input: 0, output: 0 });
+}
+
 function parseInterviewAssignment(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
@@ -1757,6 +1766,9 @@ export function adminRouter(prisma) {
     const lastBotFlowIssue = req.userRole === 'dev'
       ? buildLastBotFlowIssue(candidate.messages || [])
       : null;
+    const conversationTokenTotals = req.userRole === 'dev'
+      ? sumConversationTokenUsage(candidate.messages || [])
+      : { input: 0, output: 0 };
 
     const cvSuccess = normalizeString(req.query.cvSuccess);
     const cvError   = normalizeString(req.query.cvError);
@@ -1777,6 +1789,7 @@ export function adminRouter(prisma) {
       availableInterviewSlots,
       adminEvents,
       lastBotFlowIssue,
+      conversationTokenTotals,
       returnToPath,
       outboundWindow, cvSuccess, cvError,
       outboundSuccess, outboundError, botPauseSuccess, botPauseError,
