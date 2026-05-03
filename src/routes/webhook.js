@@ -290,6 +290,7 @@ function containsCandidateData(text, parsedData = null) {
   return hasMeaningfulCandidateData(candidateData);
 }
 function hasHv(candidate) { return Boolean(candidate?.cvStorageKey || candidate?.cvData || candidate?.cvOriginalName || candidate?.cvMimeType); }
+
 function resolveInboundMessageType(message = {}) {
   if (message.type === 'text') return MessageType.TEXT;
   if (message.type === 'document') return MessageType.DOCUMENT;
@@ -2308,9 +2309,17 @@ export function webhookRouter(prisma) {
               try {
                 const metadata = await fetchMediaMetadata(message.document.id);
                 const cvBuffer = await downloadMedia(metadata.url);
-                const analysis = isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false)
+                const attachmentAnalyzerEnabled = isFeatureEnabled('FF_ATTACHMENT_ANALYZER', false);
+                const candidateBeforeSave = await prisma.candidate.findUnique({
+                  where: { id: candidate.id },
+                  select: { cvStorageKey: true, cvData: true, cvOriginalName: true, cvMimeType: true }
+                });
+                const shouldProtectExistingCv = !attachmentAnalyzerEnabled && hasHv(candidateBeforeSave);
+                const analysis = attachmentAnalyzerEnabled
                   ? await analyzeAttachment({ buffer: cvBuffer, mimeType, filename })
-                  : { classification: 'CV_VALID', confidence: 1, evidence: 'legacy_flow' };
+                  : (shouldProtectExistingCv
+                    ? await analyzeAttachment({ buffer: cvBuffer, mimeType, filename })
+                    : { classification: 'CV_VALID', confidence: 1, evidence: 'legacy_flow' });
                 await saveAttachmentAnalysis(
                   prisma,
                   candidate.id,
