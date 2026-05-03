@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { webhookRouter } from './routes/webhook.js';

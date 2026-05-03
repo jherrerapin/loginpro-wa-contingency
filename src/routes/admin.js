@@ -3,7 +3,7 @@ import express from 'express';
 import ExcelJS from 'exceljs';
 import path from 'node:path';
 import multer from 'multer';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import {
   alignCandidateLocationFields,
   getCandidateResidenceValue,
